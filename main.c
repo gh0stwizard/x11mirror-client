@@ -6,6 +6,9 @@
 #include <getopt.h>
 #include <stdarg.h>
 #include <sys/select.h>
+#ifndef _NO_SLEEP
+#include <time.h>
+#endif
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -77,7 +80,13 @@ main (int argc, char *argv[])
             synchronize = True;
             break;
         default: /* '?' */
-            fprintf (stderr, "Usage: %s [-w window]\n", argv[0]);
+            fprintf (stderr, "Usage: %s [-w window] [OPTIONS]\n", argv[0]);
+            fprintf (stderr, "Options:\n");
+#define desc(o,d) fprintf (stderr, "\t%-16s\t%s\n", o, d);
+            desc ("-d display", "connection string to X11");
+            desc ("-w window", "target window id");
+            desc ("-S", "enable X11 synchronization");
+#undef desc
             exit (EXIT_FAILURE);
         }
     }
@@ -92,6 +101,8 @@ main (int argc, char *argv[])
     XSetErrorHandler (xerror_handler);
 
     load_x11_extensions (dpy);
+    const int damageEventType = damage_event + XDamageNotify;
+    const int shapeEventType = xshape_event + ShapeNotify;
 
     if (w == 0) {
         w = RootWindow (dpy, DefaultScreen (dpy));
@@ -131,32 +142,10 @@ main (int argc, char *argv[])
     w_pixmap = XCreatePixmap (dpy, w, wa.width, wa.height, wa.depth);
     pixmap_picture = XRenderCreatePicture (dpy, w_pixmap, format, 0, NULL);
 
-/*
-    render_op = (format->type == PictTypeDirect && format->direct.alphaMask)
-        ? PictOpOver : PictOpSrc;
-*/
-/*
-    XRectangle r = {
-        .x = wa.x,
-        .y = wa.y, 
-        .width = wa.width, 
-        .height = wa.height
-    };
-    XserverRegion region = XFixesCreateRegion (dpy, &r, 1);
-    XFixesSetPictureClipRegion (dpy, w_picture, 0, 0, region);
-    XFixesDestroyRegion (dpy, region);
-*/
-
     w_damage = XDamageCreate (dpy, w, XDamageReportRawRectangles);
     pixmap_damage = XDamageCreate (dpy, w_pixmap, XDamageReportRawRectangles);
 
     XFlush (dpy);
-
-    const int damageEventType = damage_event + XDamageNotify;
-    const int shapeEventType = xshape_event + ShapeNotify;
-
-    COMPOSITE();
-    save_file (dpy, w_screen, w, w_pixmap);
 
     while (1) {
         do {
@@ -168,7 +157,6 @@ main (int argc, char *argv[])
                 if (d == w_damage) {
                     debug ("  damage event for the window\n");
                     COMPOSITE();
-
                 }
                 else if (d == pixmap_damage) {
                     debug ("  damage event for the pixmap\n");
@@ -191,12 +179,15 @@ main (int argc, char *argv[])
                     XFreePixmap (dpy, w_pixmap);
                     XRenderFreePicture (dpy, pixmap_picture);
                     XRenderFreePicture (dpy, w_picture);
+                    XDamageDestroy (dpy, pixmap_damage);
                     w_picture =
                         XRenderCreatePicture (dpy, w, format, CPSubwindowMode, &w_pa);
                     w_pixmap = 
                         XCreatePixmap (dpy, w, wa.width, wa.height, wa.depth);
                     pixmap_picture = 
                         XRenderCreatePicture (dpy, w_pixmap, format, 0, NULL);
+                    pixmap_damage = 
+                        XDamageCreate (dpy, w_pixmap, XDamageReportRawRectangles);
                 }
             }   break;
             case DestroyNotify:
@@ -204,10 +195,16 @@ main (int argc, char *argv[])
                     goto done;
                 break;
             default:
+                COMPOSITE();
                 break;
             }
-
         } while (XPending (dpy));
+
+#ifndef _NO_SLEEP
+        /* things go very fast... */
+        struct timespec sleeptime = { .tv_sec = 0, .tv_nsec = 500000000 };
+        nanosleep (&sleeptime, NULL);
+#endif
     } /* while (1) */
 
 #undef COMPOSITE
@@ -215,6 +212,10 @@ main (int argc, char *argv[])
 done:
     if (w_pixmap)
         XFreePixmap (dpy, w_pixmap);
+    XDamageDestroy (dpy, w_damage);
+    XDamageDestroy (dpy, pixmap_damage);
+    XRenderFreePicture (dpy, pixmap_picture);
+    XRenderFreePicture (dpy, w_picture);
     XSync (dpy, False);
     XCloseDisplay (dpy);
     return 0;
@@ -326,13 +327,15 @@ test_cm (Display *dpy)
 static inline void
 save_file (Display *d, int screen, Window w, Pixmap p)
 {
-    if (!(out_file = fopen ("/tmp/x11mirror.xwd~", "wb"))) {
+#define OUTFILE "/run/user/1000/x11mirror.xwd"
+    if (!(out_file = fopen (OUTFILE "~", "wb"))) {
         perror ("fopen");
         exit (EXIT_FAILURE);
     }
     Pixmap_Dump (d, screen, w, p, out_file);
     fclose (out_file);
-    rename ("/tmp/x11mirror.xwd~", "/tmp/x11mirror.xwd");
+    rename (OUTFILE "~", OUTFILE);
+#undef OUTFILE
 }
 
 
@@ -343,14 +346,6 @@ xerror_handler (Display *dpy, XErrorEvent *ev)
     int         o;
     const char  *name = NULL;
     static char buffer[256];
-
-/*
-    if (ev->request_code == composite_opcode && 
-        ev->minor_code == X_CompositeRedirectSubwindows)
-    {
-	    die ("Another composite manager is already running\n");
-    }
-*/
 
     o = ev->error_code - xfixes_error;
     switch (o) {
