@@ -19,47 +19,41 @@
 
 /* is there compositor manager */
 static Bool test_cm (Display *d);
+/* load necessary x11's extensions */
 static void load_x11_extensions (Display *);
 static void debug_window (Display *d, Window w, XWindowAttributes *wa);
-static Window clone_window (Display *d, XWindowAttributes *source_wa);
-
-static int      scrn;
-static Window   root;
+/* select events for specified target window */
+static void xselect_input (Display *d, Window w);
+static inline void
+save_file (Display *d, int screen, Window w, Pixmap p);
+static int
+xerror_handler (Display *dpy, XErrorEvent *ev);
 
 /* X11 extensions offsets */
-static int composite_op, composite_ev, composite_error;
+static int composite_opcode, composite_event, composite_error;
 static int render_event, render_error;
 static int xfixes_event, xfixes_error;
 static int damage_event, damage_error;
 static int xshape_event, xshape_error;
 
+static FILE *out_file;
+
 
 extern int
 main (int argc, char *argv[])
 {
-    int         opt;
-    Window      w = 0, clone = 0;
+    int         opt;                /* options of  getopt */
+    Window      w = 0;              /* target window */
+    int         w_screen = -1;      /* number of screen of target window */
     Display     *dpy;
-    char        *display = NULL;
+    char        *display = NULL;    /* display string from args */
     XEvent      ev;
     XWindowAttributes wa;
-    Window      root_return, parent;
-    Window      *children;
-    unsigned int nchildren;
-    long ev_mask = StructureNotifyMask | SubstructureNotifyMask |
-        PropertyChangeMask |
-        EnterWindowMask | LeaveWindowMask |
-        ExposureMask |
-        FocusChangeMask |
-        PointerMotionMask;
-    FILE        *out_file;
-
-    (void)clone;
-
-    if (!(out_file = fopen ("/tmp/x11mirror.xwd", "wb"))) {
-        perror ("fopen");
-        exit (EXIT_FAILURE);
-    }
+    Pixmap      w_pixmap = 0;
+    XRenderPictFormat *format;
+    Picture     w_picture, pixmap_picture;
+    XRenderPictureAttributes w_pa = { .subwindow_mode = IncludeInferiors };
+    Bool        redraw = False;
 
     while ( (opt = getopt (argc, argv, "d:w:")) != -1 ) {
         switch (opt) {
@@ -83,85 +77,75 @@ main (int argc, char *argv[])
     if (!dpy)
         die ("Could not open the display.\n");
 
+    XSetErrorHandler (xerror_handler);
+
     load_x11_extensions (dpy);
 
-    scrn = DefaultScreen (dpy);
-    root = RootWindow (dpy, scrn);
+    if (w == 0) {
+        w = RootWindow (dpy, DefaultScreen (dpy));
+        debug ("using root window as target one.\n");
+    }
 
     if (test_cm (dpy))
-        printf ("compositor manager was not found.\n");
+        debug ("compositor manager was not found.\n");
     else
-        printf ("compositor manager has been found.\n");
+        debug ("compositor manager has been found.\n");
 
     for (int i = 0; i < ScreenCount (dpy); i++) {
         XCompositeRedirectSubwindows (dpy, RootWindow (dpy, i),
             CompositeRedirectAutomatic);
     }
 
-    if (w == 0) {
-        printf ("no window has been specified, using root\n");
-        w = root;
-    }
-
-    debug ("window id = 0x%lx\n", w);
-
-    XGrabServer (dpy);
-    XSelectInput (dpy, w, ev_mask);
-    XShapeSelectInput (dpy, w, ShapeNotifyMask);
-    XQueryTree (dpy, w, &root_return, &parent, &children, &nchildren);
-    for (unsigned int i = 0; i < nchildren; i++) {
-        XSelectInput (dpy, children[i], ev_mask);
-        XShapeSelectInput (dpy, children[i], ShapeNotifyMask);
-    }    
-    XFree (children);
-    XUngrabServer (dpy);
-
-    debug ("retrieve window attributes\n");
-
+    debug ("retrieving attributes for window = 0x%lx\n", w);
     XGetWindowAttributes (dpy, w, &wa);
     debug_window (dpy, w, &wa);
-//    clone = clone_window (dpy, &wa);
-//    if (!clone)
-//        die ("Failed to create cloned window\n");
 
-    Pixmap clonePixmap = XCreatePixmap (dpy, w, wa.width, wa.height, wa.depth);
+    for (int i = 0; i < ScreenCount (dpy); i++) {
+        if (ScreenOfDisplay (dpy, i) == wa.screen) {
+            w_screen = i;
+            debug ("default screen = %d, window screen = %d\n",
+                DefaultScreen (dpy), i);
+            break;
+        }
+    }
 
-//    XStoreName (dpy, clone, "This is a clone!");
+    if (w_screen < 0)
+        die ("failed to find out a screen number of the window.\n");
 
-    XRenderPictFormat *format = XRenderFindVisualFormat (dpy, wa.visual);
-    int op = (format->type == PictTypeDirect && format->direct.alphaMask)
-        ? PictOpOver : PictOpSrc;
-    op = PictOpSrc;
-    XRenderPictureAttributes pa = { .subwindow_mode = IncludeInferiors };
-    Picture picture = XRenderCreatePicture (dpy, w, format, CPSubwindowMode, &pa);
+    xselect_input (dpy, w);
 
     format = XRenderFindVisualFormat (dpy, wa.visual);
-    Picture clonePicture = XRenderCreatePicture (dpy, clonePixmap, format, 0, NULL);
+    w_picture = XRenderCreatePicture (dpy, w, format, CPSubwindowMode, &w_pa);
+    w_pixmap = XCreatePixmap (dpy, w, wa.width, wa.height, wa.depth);
+    pixmap_picture = XRenderCreatePicture (dpy, w_pixmap, format, 0, NULL);
 
-
-    XRectangle r = { .x = 0, .y = 0, .width = wa.width, .height = wa.height };
 /*
-    XserverRegion cloneRegion = XFixesCreateRegion (dpy, &r, 1);
-    XFixesSetPictureClipRegion (dpy, clonePicture, 0, 0, cloneRegion);
-    XFixesDestroyRegion (dpy, cloneRegion);
+    render_op = (format->type == PictTypeDirect && format->direct.alphaMask)
+        ? PictOpOver : PictOpSrc;
 */
-
-    r.x = wa.x;
-    r.y = wa.y;
+/*
+    XRectangle r = {
+        .x = wa.x,
+        .y = wa.y, 
+        .width = wa.width, 
+        .height = wa.height
+    };
     XserverRegion region = XFixesCreateRegion (dpy, &r, 1);
-    XFixesSetPictureClipRegion (dpy, picture, 0, 0, region);
+    XFixesSetPictureClipRegion (dpy, w_picture, 0, 0, region);
     XFixesDestroyRegion (dpy, region);
 
     Damage w_damage = XDamageCreate (dpy, w, XDamageReportNonEmpty);
     (void)w_damage;
-/*    Damage clone_damage = XDamageCreate (dpy, clone, XDamageReportNonEmpty);
-    (void)clone_damage; */
-
-//    XMapWindow (dpy, clone);
+*/
     XFlush (dpy);
 
     const int damageEventType = damage_event + XDamageNotify;
     const int shapeEventType = xshape_event + ShapeNotify;
+
+#define COMPOSITE() XRenderComposite (dpy, \
+    PictOpSrc, w_picture, None, pixmap_picture, \
+    0, 0, 0, 0, \
+    0, 0, wa.width, wa.height)
 
     while (1) {
         do {
@@ -169,31 +153,35 @@ main (int argc, char *argv[])
             debug ("event for 0x%lx, type = %d\n", ev.xany.window, ev.type);
 
             if (ev.type == damageEventType) {
-                debug ("damage event for 0x%lx\n", ev.xany.window);
-//                if (ev.xany.window == clone) {
-//                    Window_Dump (dpy, scrn, clone, out_file);
-//                    fclose (out_file);
-//                    goto done;
-//                }
+                debug ("  damage event\n");
                 continue;
             }
             else if (ev.type == shapeEventType) {
-                debug ("shape event for 0x%lx\n", ev.xany.window);
+                debug ("  shape event\n");
                 continue;
             }
 
             switch (ev.type) {
             case Expose:
-                break;
             case ConfigureNotify:
-//                if (ev.xconfigure.window == w)
-//                    XGetWindowAttributes (dpy, w, &wa);
-                break;
             case MapNotify: {
-//                if (ev.xmap.window == clone)
-//                    XUnmapWindow (dpy, clone);
+                if (ev.xconfigure.window == w) {
+                    XGetWindowAttributes (dpy, w, &wa);
+                    format = XRenderFindVisualFormat (dpy, wa.visual);
+                    XFreePixmap (dpy, w_pixmap);
+                    XRenderFreePicture (dpy, pixmap_picture);
+                    XRenderFreePicture (dpy, w_picture); /* XXX: is it really needed? */
+                    w_picture =
+                        XRenderCreatePicture (dpy, w, format, CPSubwindowMode, &w_pa);
+                    w_pixmap = 
+                        XCreatePixmap (dpy, w, wa.width, wa.height, wa.depth);
+                    pixmap_picture = 
+                        XRenderCreatePicture (dpy, w_pixmap, format, 0, NULL);
+                }
             }   break;
             case UnmapNotify:
+                break;
+            case DestroyNotify:
                 if (ev.xunmap.window == w)
                     goto done;
                 break;
@@ -201,10 +189,9 @@ main (int argc, char *argv[])
                 break;
             }
 
-//            if (ev.xany.window != clone) {
-                XRenderComposite (dpy, op, picture, None, clonePicture,
-                    0, 0, 0, 0, 0, 0, wa.width, wa.height);
-//            }
+            COMPOSITE();
+            save_file (dpy, w_screen, w, w_pixmap);
+
         } while (XPending (dpy));
 
         /* A dirty hack to avoid implementing own timer.
@@ -221,17 +208,20 @@ main (int argc, char *argv[])
         FD_SET (x11_fd, &fdset);
         struct timeval small_time = { 0, 500000 };
         if (select (x11_fd + 1, &fdset, NULL, NULL, &small_time) == 0) {
-            XRenderComposite (dpy, op, picture, None, clonePicture,
-                0, 0, 0, 0, 0, 0, wa.width, wa.height);
-            //Window_Dump (dpy, scrn, w, out_file);
-            Pixmap_Dump (dpy, scrn, w, clonePixmap, out_file);
-            fclose (out_file);
-            goto done;
+            debug ("copy content by timeout.\n");
+            COMPOSITE();
+//            save_file (dpy, w_screen, w, w_pixmap);
+//            goto done;
         }
 
-    }
+    } /* while (1) */
+
+#undef COMPOSITE
 
 done:
+    if (w_pixmap)
+        XFreePixmap (dpy, w_pixmap);
+    XSync (dpy, False);
     XCloseDisplay (dpy);
     return 0;
 }
@@ -243,7 +233,7 @@ load_x11_extensions (Display *dpy)
     int major_version, minor_version;
 
     if (!XQueryExtension (dpy, COMPOSITE_NAME, 
-        &composite_op, &composite_ev, &composite_error))
+        &composite_opcode, &composite_event, &composite_error))
         die ("COMPOSITE extension is not installed.\n");
     XCompositeQueryVersion (dpy, &major_version, &minor_version);
     if (major_version == 0 && minor_version < 4)
@@ -272,29 +262,32 @@ load_x11_extensions (Display *dpy)
 }
 
 
-static Window
-clone_window (Display *d, XWindowAttributes *source_wa)
+static void
+xselect_input (Display *d, Window w)
 {
-    Window          w;
-    unsigned long   attr_mask = CWBackingStore | CWBackPixel | CWEventMask;
-    XSetWindowAttributes wa = { 0 };
+    Window      root, parent, *children;
+    unsigned int nchildren;
+    long ev_mask = StructureNotifyMask | 
+        SubstructureNotifyMask |
+//        PointerMotionMask |
+/*
+        EnterWindowMask | LeaveWindowMask |
+        FocusChangeMask |
+*/
+        PropertyChangeMask |
+        ExposureMask;
 
-    wa.background_pixel = WhitePixel (d, DefaultScreen (d));
-    wa.event_mask = StructureNotifyMask | ExposureMask;
-    wa.backing_store = Always;
-
-    w = XCreateWindow (d, RootWindow (d, DefaultScreen (d)),
-        0, 0,
-        source_wa->width, source_wa->height,
-        source_wa->border_width,
-        CopyFromParent,
-        InputOutput, CopyFromParent, attr_mask, &wa);
-
-    XClearWindow (d, w);
-
-    return w;
+    XGrabServer (d);
+    XSelectInput (d, w, ev_mask);
+    XShapeSelectInput (d, w, ShapeNotifyMask);
+    XQueryTree (d, w, &root, &parent, &children, &nchildren);
+    for (unsigned int i = 0; i < nchildren; i++) {
+        XSelectInput (d, children[i], ev_mask);
+        XShapeSelectInput (d, children[i], ShapeNotifyMask);
+    }    
+    XFree (children);
+    XUngrabServer (d);
 }
-
 
 static void
 debug_window (Display *d, Window w, XWindowAttributes *wa)
@@ -326,9 +319,72 @@ test_cm (Display *dpy)
 {
     static char name[] = "_NET_WM_CM_Sxx";
 
-    snprintf (name, sizeof (name), "_NET_WM_CM_S%d", scrn);
+    snprintf (name, sizeof (name), "_NET_WM_CM_S%d", DefaultScreen (dpy));
     if (None == XGetSelectionOwner (dpy, XInternAtom (dpy, name, False)))
         return True;
     else
         return False;
+}
+
+
+static inline void
+save_file (Display *d, int screen, Window w, Pixmap p)
+{
+    if (!(out_file = fopen ("/tmp/x11mirror.xwd", "wb"))) {
+        perror ("fopen");
+        exit (EXIT_FAILURE);
+    }
+    Pixmap_Dump (d, screen, w, p, out_file);
+    fclose (out_file);
+}
+
+
+static int
+xerror_handler (Display *dpy, XErrorEvent *ev)
+{
+    int         o;
+    const char  *name = NULL;
+    static char buffer[256];
+
+/*
+    if (ev->request_code == composite_opcode && 
+        ev->minor_code == X_CompositeRedirectSubwindows)
+    {
+	    die ("Another composite manager is already running\n");
+    }
+*/
+
+    o = ev->error_code - xfixes_error;
+    switch (o) {
+    case BadRegion: name = "BadRegion";	break;
+    default: break;
+    }
+
+    o = ev->error_code - damage_error;
+    switch (o) {
+    case BadDamage: name = "BadDamage";	break;
+    default: break;
+    }
+
+    o = ev->error_code - render_error;
+    switch (o) {
+    case BadPictFormat: name ="BadPictFormat"; break;
+    case BadPicture: name ="BadPicture"; break;
+    case BadPictOp: name ="BadPictOp"; break;
+    case BadGlyphSet: name ="BadGlyphSet"; break;
+    case BadGlyph: name ="BadGlyph"; break;
+    default: break;
+    }
+
+    if (name == NULL) {
+	    buffer[0] = '\0';
+	    XGetErrorText (dpy, ev->error_code, buffer, sizeof (buffer));
+	    name = buffer;
+    }
+
+    fprintf (stderr, "error %d: %s request %d minor %d serial %lu\n",
+	     ev->error_code, (strlen (name) > 0) ? name : "unknown",
+	     ev->request_code, ev->minor_code, ev->serial);
+
+    return 0;
 }

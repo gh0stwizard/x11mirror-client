@@ -4,7 +4,7 @@
 #if defined (_DEBUG)
 #define debug(...) fprintf (stderr, __VA_ARGS__)
 #else
-#define debug(...) { /* nop */ }
+#define debug(...) do { /* nop */ } while (0)
 #endif
 
 void die (const char *fmt, ...);

@@ -427,12 +427,13 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
     char *win_name;
     char default_win_name[] = "xwdump";
     Bool got_win_name;
-    XWindowAttributes win_info;
+    static XWindowAttributes win_info;
     XImage *image;
-    int absx, absy, x, y;
+    static int absx, absy;
+    int x, y;
     unsigned width, height;
     int dwidth, dheight;
-    Window dummywin;
+    static Window dummywin;
     XWDFileHeader header;
     XWDColor xwdcolor;
 
@@ -448,21 +449,23 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
     Visual              vis_h, *vis;
     int                 allImage = 0;
 
+    Status              status;
 
     /*
      * Get the parameters of the window being dumped.
      */
     debug ("xwd: Getting target window information.\n");
-    if(!XGetWindowAttributes(dpy, window, &win_info))
-      die ("Can't get target window attributes.");
+    status = XGetWindowAttributes(dpy, window, &win_info);
+    debug ("xwd:    status = %d\n", status);
 
     /* handle any frame window */
-    if (!XTranslateCoordinates (dpy, window, RootWindow (dpy, screen),
-        0, 0, &absx, &absy, &dummywin))
-    {
+    debug ("xwd: Getting target window coordinates.\n");
+    status = XTranslateCoordinates (dpy, window, RootWindow (dpy, screen),
+        0, 0, &absx, &absy, &dummywin);
+    debug ("xwd:    status = %d\n", status);
+    if (!status)
 	    die ("unable to translate window coordinates (%d,%d)\n",
         absx, absy);
-    }
 
     win_info.x = absx;
     win_info.y = absy;
@@ -470,14 +473,14 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
     height = win_info.height;
 
     if (!nobdrs) {
-	absx -= win_info.border_width;
-	absy -= win_info.border_width;
-	width += (2 * win_info.border_width);
-	height += (2 * win_info.border_width);
+	    absx -= win_info.border_width;
+	    absy -= win_info.border_width;
+	    width += (2 * win_info.border_width);
+	    height += (2 * win_info.border_width);
     }
+
     dwidth = DisplayWidth (dpy, screen);
     dheight = DisplayHeight (dpy, screen);
-
 
     /* clip to window */
     if (absx < 0) width += absx, absx = 0;
@@ -488,10 +491,11 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
 
     XFetchName(dpy, window, &win_name);
     if (!win_name || !win_name[0]) {
-	win_name = default_win_name;
-	got_win_name = False;
-    } else {
-	got_win_name = True;
+	    win_name = default_win_name;
+	    got_win_name = False;
+    }
+    else {
+	    got_win_name = True;
     }
 
     /* sizeof(char) is included for the null string terminator. */
@@ -509,14 +513,13 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
         absx, absy,
         width, height, &transparentOverlays, &numVisuals, &pVisuals,
         &numOverlayVisuals, &pOverlayVisuals, &numImageVisuals,
-        &pImageVisuals, &vis_regions, &vis_image_regions, &allImage);
+        &pImageVisuals, &vis_regions, &vis_image_regions,
+        &allImage);
 
     debug ("xwd: GetImage of the pixmap\n");
     image = XGetImage (dpy, pixmap, x, y, width, height, AllPlanes, format);
     if (!image)
         die ("unable to get image at %dx%d+%d+%d\n", width, height, x, y);
-
-    if (add_pixel_value != 0) XAddPixel (image, add_pixel_value);
 
     /*
      * Determine the pixmap size.
@@ -582,17 +585,18 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
     header.window_bdrwidth = (CARD32) win_info.border_width;
 
     if (*(char *) &swaptest) {
-	_swaplong((char *) &header, sizeof(header));
-	for (i = 0; i < ncolors; i++) {
-	    _swaplong((char *) &colors[i].pixel, sizeof(CARD32));
-	    _swapshort((char *) &colors[i].red, 3 * sizeof(short));
-	}
+        _swaplong ((char *) &header, sizeof(header));
+        for (i = 0; i < ncolors; i++) {
+            _swaplong ((char *) &colors[i].pixel, sizeof(CARD32));
+            _swapshort ((char *) &colors[i].red, 3 * sizeof(short));
+        }
     }
 
-    if (fwrite((char *)&header, SIZEOF(XWDheader), 1, out) != 1 ||
-	fwrite(win_name, win_name_size, 1, out) != 1) {
-	perror ("fwrite header");
-	exit (EXIT_FAILURE);
+    if (fwrite ((char *)&header, SIZEOF(XWDheader), 1, out) != 1 ||
+	    fwrite (win_name, win_name_size, 1, out) != 1)
+    {
+	    perror ("fwrite header/name");
+	    exit (EXIT_FAILURE);
     }
 
     /*
@@ -601,15 +605,15 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
 
     debug ("xwd: Dumping %d colors.\n", ncolors);
     for (i = 0; i < ncolors; i++) {
-	xwdcolor.pixel = colors[i].pixel;
-	xwdcolor.red = colors[i].red;
-	xwdcolor.green = colors[i].green;
-	xwdcolor.blue = colors[i].blue;
-	xwdcolor.flags = colors[i].flags;
-	if (fwrite((char *) &xwdcolor, SIZEOF(XWDColor), 1, out) != 1) {
-	    perror ("fwrite xwdcolor");
-	    exit (EXIT_FAILURE);
-	}
+        xwdcolor.pixel = colors[i].pixel;
+        xwdcolor.red = colors[i].red;
+        xwdcolor.green = colors[i].green;
+        xwdcolor.blue = colors[i].blue;
+        xwdcolor.flags = colors[i].flags;
+	    if (fwrite ((char *) &xwdcolor, SIZEOF(XWDColor), 1, out) != 1) {
+	        perror ("fwrite xwdcolor");
+	        exit (EXIT_FAILURE);
+        }
     }
 
     /*
@@ -623,9 +627,9 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
      *  what other functions of xwd will be taken over by this (as yet)
      *  non-existant X function.
      */
-    if (fwrite(image->data, (int) buffer_size, 1, out) != 1) {
-	perror ("fwrite image data");
-	exit (EXIT_FAILURE);
+    if (fwrite (image->data, (int) buffer_size, 1, out) != 1) {
+        perror ("fwrite image data");
+        exit (EXIT_FAILURE);
     }
 
     /*
