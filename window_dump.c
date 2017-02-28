@@ -427,17 +427,16 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
     char *win_name;
     char default_win_name[] = "xwdump";
     Bool got_win_name;
-    static XWindowAttributes win_info;
+    XWindowAttributes win_info;
     XImage *image;
-    static int absx, absy;
-    int x, y;
+    int absx, absy, x, y;
     unsigned width, height;
     int dwidth, dheight;
-    static Window dummywin;
+    Window dummywin;
     XWDFileHeader header;
     XWDColor xwdcolor;
 
-    int                 transparentOverlays , multiVis;
+    int                 transparentOverlays , multiVis = 0;
     int                 numVisuals;
     XVisualInfo         *pVisuals;
     int                 numOverlayVisuals;
@@ -455,17 +454,27 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
      * Get the parameters of the window being dumped.
      */
     debug ("xwd: Getting target window information.\n");
-    status = XGetWindowAttributes(dpy, window, &win_info);
+    status = XGetWindowAttributes (dpy, window, &win_info);
     debug ("xwd:    status = %d\n", status);
+    if (!status) {
+#ifndef _NO_ERRORS
+	    fprintf (stderr, "Can't get target window attributes.\n");
+#endif
+        return;
+    }
 
     /* handle any frame window */
     debug ("xwd: Getting target window coordinates.\n");
     status = XTranslateCoordinates (dpy, window, RootWindow (dpy, screen),
         0, 0, &absx, &absy, &dummywin);
     debug ("xwd:    status = %d\n", status);
-    if (!status)
-	    die ("unable to translate window coordinates (%d,%d)\n",
-        absx, absy);
+    if (!status) {
+#ifndef _NO_ERRORS
+	    fprintf (stderr,
+            "unable to translate window coordinates (%d,%d)\n", absx, absy);
+#endif
+        return;
+    }
 
     win_info.x = absx;
     win_info.y = absy;
@@ -489,7 +498,7 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
     if (absx + (int)width > dwidth) width = dwidth - absx;
     if (absy + (int)height > dheight) height = dheight - absy;
 
-    XFetchName(dpy, window, &win_name);
+    XFetchName (dpy, window, &win_name);
     if (!win_name || !win_name[0]) {
 	    win_name = default_win_name;
 	    got_win_name = False;
@@ -508,6 +517,21 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
     x = absx - win_info.x;
     y = absy - win_info.y;
 
+
+/* XXX: infinite recursion bug in make_src_list near/after XQueryTree()
+ *      in file multiVis.c
+ */
+    (void)allImage;
+    (void)vis_image_regions;
+    (void)vis_regions;
+    (void)pImageVisuals;
+    (void)numImageVisuals;
+    (void)pOverlayVisuals;
+    (void)numOverlayVisuals;
+    (void)pVisuals;
+    (void)numVisuals;
+    (void)transparentOverlays;
+/*
     multiVis = GetMultiVisualRegions (
         dpy, RootWindow(dpy, screen),
         absx, absy,
@@ -515,11 +539,19 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
         &numOverlayVisuals, &pOverlayVisuals, &numImageVisuals,
         &pImageVisuals, &vis_regions, &vis_image_regions,
         &allImage);
+*/
 
     debug ("xwd: GetImage of the pixmap\n");
     image = XGetImage (dpy, pixmap, x, y, width, height, AllPlanes, format);
-    if (!image)
-        die ("unable to get image at %dx%d+%d+%d\n", width, height, x, y);
+    if (!image) {
+#ifndef _NO_ERRORS
+        fprintf (stderr,
+            "unable to get image at %dx%d+%d+%d\n", width, height, x, y);
+#endif
+        if (got_win_name)
+            XFree (win_name);
+        return;
+    }
 
     /*
      * Determine the pixmap size.
@@ -619,7 +651,7 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
     /*
      * Write out the buffer.
      */
-    debug ("xwd: Dumping pixmap.  bufsize=%d\n",buffer_size);
+    debug ("xwd: Dumping pixmap.  bufsize = %d\n", buffer_size);
 
     /*
      *    This copying of the bit stream (data) to a file is to be replaced
@@ -636,14 +668,14 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
      * free the color buffer.
      */
 
-    if(ncolors > 0) debug ("xwd: Freeing colors.\n");
-    if(ncolors > 0) free(colors);
+    if (ncolors > 0) debug ("xwd: Freeing colors.\n");
+    if (ncolors > 0) free (colors);
 
     /*
      * Free window name string.
      */
     debug ("xwd: Freeing window name string.\n");
-    if (got_win_name) XFree(win_name);
+    if (got_win_name) XFree (win_name);
 
     /*
      * Free image

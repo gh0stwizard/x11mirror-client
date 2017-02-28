@@ -42,6 +42,11 @@ static FILE *out_file;
 extern int
 main (int argc, char *argv[])
 {
+#define COMPOSITE() XRenderComposite (dpy, \
+    PictOpSrc, w_picture, None, pixmap_picture, \
+    0, 0, 0, 0, \
+    0, 0, wa.width, wa.height)
+
     int         opt;                /* options of  getopt */
     Window      w = 0;              /* target window */
     int         w_screen = -1;      /* number of screen of target window */
@@ -53,9 +58,10 @@ main (int argc, char *argv[])
     XRenderPictFormat *format;
     Picture     w_picture, pixmap_picture;
     XRenderPictureAttributes w_pa = { .subwindow_mode = IncludeInferiors };
-    Bool        redraw = False;
+    Damage      w_damage, pixmap_damage;
+    Bool        synchronize = False;
 
-    while ( (opt = getopt (argc, argv, "d:w:")) != -1 ) {
+    while ( (opt = getopt (argc, argv, "d:w:S")) != -1 ) {
         switch (opt) {
         case 'd':
             display = optarg;
@@ -67,6 +73,9 @@ main (int argc, char *argv[])
             if (w == 0)
                 die ("Invalid window id: %s.", optarg);
             break;
+        case 'S':
+            synchronize = True;
+            break;
         default: /* '?' */
             fprintf (stderr, "Usage: %s [-w window]\n", argv[0]);
             exit (EXIT_FAILURE);
@@ -76,6 +85,9 @@ main (int argc, char *argv[])
     dpy = XOpenDisplay (display);
     if (!dpy)
         die ("Could not open the display.\n");
+
+    if (synchronize)
+        XSynchronize (dpy, 1);
 
     XSetErrorHandler (xerror_handler);
 
@@ -133,19 +145,18 @@ main (int argc, char *argv[])
     XserverRegion region = XFixesCreateRegion (dpy, &r, 1);
     XFixesSetPictureClipRegion (dpy, w_picture, 0, 0, region);
     XFixesDestroyRegion (dpy, region);
-
-    Damage w_damage = XDamageCreate (dpy, w, XDamageReportNonEmpty);
-    (void)w_damage;
 */
+
+    w_damage = XDamageCreate (dpy, w, XDamageReportRawRectangles);
+    pixmap_damage = XDamageCreate (dpy, w_pixmap, XDamageReportRawRectangles);
+
     XFlush (dpy);
 
     const int damageEventType = damage_event + XDamageNotify;
     const int shapeEventType = xshape_event + ShapeNotify;
 
-#define COMPOSITE() XRenderComposite (dpy, \
-    PictOpSrc, w_picture, None, pixmap_picture, \
-    0, 0, 0, 0, \
-    0, 0, wa.width, wa.height)
+    COMPOSITE();
+    save_file (dpy, w_screen, w, w_pixmap);
 
     while (1) {
         do {
@@ -153,7 +164,16 @@ main (int argc, char *argv[])
             debug ("event for 0x%lx, type = %d\n", ev.xany.window, ev.type);
 
             if (ev.type == damageEventType) {
-                debug ("  damage event\n");
+                Damage d = ((XDamageNotifyEvent *)&ev)->damage;
+                if (d == w_damage) {
+                    debug ("  damage event for the window\n");
+                    COMPOSITE();
+
+                }
+                else if (d == pixmap_damage) {
+                    debug ("  damage event for the pixmap\n");
+                    save_file (dpy, w_screen, w, w_pixmap);
+                }
                 continue;
             }
             else if (ev.type == shapeEventType) {
@@ -162,15 +182,15 @@ main (int argc, char *argv[])
             }
 
             switch (ev.type) {
-            case Expose:
             case ConfigureNotify:
             case MapNotify: {
                 if (ev.xconfigure.window == w) {
+                    debug ("updating window attributes.\n");
                     XGetWindowAttributes (dpy, w, &wa);
                     format = XRenderFindVisualFormat (dpy, wa.visual);
                     XFreePixmap (dpy, w_pixmap);
                     XRenderFreePicture (dpy, pixmap_picture);
-                    XRenderFreePicture (dpy, w_picture); /* XXX: is it really needed? */
+                    XRenderFreePicture (dpy, w_picture);
                     w_picture =
                         XRenderCreatePicture (dpy, w, format, CPSubwindowMode, &w_pa);
                     w_pixmap = 
@@ -179,8 +199,6 @@ main (int argc, char *argv[])
                         XRenderCreatePicture (dpy, w_pixmap, format, 0, NULL);
                 }
             }   break;
-            case UnmapNotify:
-                break;
             case DestroyNotify:
                 if (ev.xunmap.window == w)
                     goto done;
@@ -189,31 +207,7 @@ main (int argc, char *argv[])
                 break;
             }
 
-            COMPOSITE();
-            save_file (dpy, w_screen, w, w_pixmap);
-
         } while (XPending (dpy));
-
-        /* A dirty hack to avoid implementing own timer.
-         * There is a delay between the moment when we got an event
-         * from the target window AND the moment when X-server is
-         * actually drawn (updated) a picture of the window.
-         * So, in the moment of the event the target window contains
-         * an old image and because of that we have to wait 
-         * a small period of a time to get/draw a correct image.
-         */
-        int x11_fd = ConnectionNumber (dpy);
-        fd_set fdset;
-        FD_ZERO (&fdset);
-        FD_SET (x11_fd, &fdset);
-        struct timeval small_time = { 0, 500000 };
-        if (select (x11_fd + 1, &fdset, NULL, NULL, &small_time) == 0) {
-            debug ("copy content by timeout.\n");
-            COMPOSITE();
-//            save_file (dpy, w_screen, w, w_pixmap);
-//            goto done;
-        }
-
     } /* while (1) */
 
 #undef COMPOSITE
@@ -269,12 +263,12 @@ xselect_input (Display *d, Window w)
     unsigned int nchildren;
     long ev_mask = StructureNotifyMask | 
         SubstructureNotifyMask |
-//        PointerMotionMask |
 /*
+        PointerMotionMask |
         EnterWindowMask | LeaveWindowMask |
         FocusChangeMask |
-*/
         PropertyChangeMask |
+*/
         ExposureMask;
 
     XGrabServer (d);
@@ -301,8 +295,10 @@ debug_window (Display *d, Window w, XWindowAttributes *wa)
 
 /* TODO: _NET_WM_NAME */
     XFetchName (d, w, &window_name);
-    if (window_name != NULL)
+    if (window_name != NULL) {
         debug ("name: %s\n", window_name);
+        XFree (window_name);
+    }
     debug ("x: %d y: %d\n", wa->x, wa->y);
     debug ("width: %d height: %d\n", wa->width, wa->height);
     debug ("root: 0x%lx\n", wa->root);
@@ -330,18 +326,20 @@ test_cm (Display *dpy)
 static inline void
 save_file (Display *d, int screen, Window w, Pixmap p)
 {
-    if (!(out_file = fopen ("/tmp/x11mirror.xwd", "wb"))) {
+    if (!(out_file = fopen ("/tmp/x11mirror.xwd~", "wb"))) {
         perror ("fopen");
         exit (EXIT_FAILURE);
     }
     Pixmap_Dump (d, screen, w, p, out_file);
     fclose (out_file);
+    rename ("/tmp/x11mirror.xwd~", "/tmp/x11mirror.xwd");
 }
 
 
 static int
 xerror_handler (Display *dpy, XErrorEvent *ev)
 {
+#ifndef _NO_ERRORS
     int         o;
     const char  *name = NULL;
     static char buffer[256];
@@ -385,6 +383,6 @@ xerror_handler (Display *dpy, XErrorEvent *ev)
     fprintf (stderr, "error %d: %s request %d minor %d serial %lu\n",
 	     ev->error_code, (strlen (name) > 0) ? name : "unknown",
 	     ev->request_code, ev->minor_code, ev->serial);
-
+#endif
     return 0;
 }
