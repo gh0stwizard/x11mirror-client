@@ -45,11 +45,6 @@ static FILE *out_file;
 extern int
 main (int argc, char *argv[])
 {
-#define COMPOSITE() XRenderComposite (dpy, \
-    PictOpSrc, w_picture, None, pixmap_picture, \
-    0, 0, 0, 0, \
-    0, 0, wa.width, wa.height)
-
     int         opt;                /* options of  getopt */
     Window      w = 0;              /* target window */
     int         w_screen = -1;      /* number of screen of target window */
@@ -95,9 +90,7 @@ main (int argc, char *argv[])
     if (!dpy)
         die ("Could not open the display.\n");
 
-    if (synchronize)
-        XSynchronize (dpy, 1);
-
+    XSynchronize (dpy, synchronize);
     XSetErrorHandler (xerror_handler);
 
     load_x11_extensions (dpy);
@@ -146,6 +139,11 @@ main (int argc, char *argv[])
     pixmap_damage = XDamageCreate (dpy, w_pixmap, XDamageReportRawRectangles);
 
     XFlush (dpy);
+
+#define COMPOSITE() XRenderComposite (dpy, \
+    PictOpSrc, w_picture, None, pixmap_picture, \
+    0, 0, 0, 0, \
+    0, 0, wa.width, wa.height)
 
     while (1) {
         do {
@@ -202,7 +200,10 @@ main (int argc, char *argv[])
 
 #ifndef _NO_SLEEP
         /* things go very fast... */
-        struct timespec sleeptime = { .tv_sec = 0, .tv_nsec = 500000000 };
+        struct timespec sleeptime = {
+            .tv_sec = 0,
+            .tv_nsec = 500 * 1000000
+        };
         nanosleep (&sleeptime, NULL);
 #endif
     } /* while (1) */
@@ -332,7 +333,10 @@ save_file (Display *d, int screen, Window w, Pixmap p)
         perror ("fopen");
         exit (EXIT_FAILURE);
     }
-    Pixmap_Dump (d, screen, w, p, out_file);
+    mirrorDump *dump = Pixmap_Dump (d, screen, w, p);
+    if (dump)
+        Save_Dump (dump, out_file);
+    Free_Dump (dump);
     fclose (out_file);
     rename (OUTFILE "~", OUTFILE);
 #undef OUTFILE

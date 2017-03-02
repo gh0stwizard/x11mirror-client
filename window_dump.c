@@ -26,6 +26,7 @@ in this Software without prior written authorization from The Open Group.
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <stdlib.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/XWDFile.h>
@@ -33,40 +34,42 @@ in this Software without prior written authorization from The Open Group.
 #include "list.h"
 #include "wsutils.h"
 #include "multiVis.h"
+#include "window_dump.h"
 
 static const int nobdrs = 0;
 static const int format = ZPixmap;
 static const Bool use_installed = False;
+ 
+extern void _swapshort (register char *, register unsigned);
+extern void _swaplong (register char *, register unsigned);
 
-extern void _swapshort(register char *, register unsigned);
-extern void _swaplong(register char *, register unsigned);
-
-extern int Image_Size(XImage *);
-extern int Get_XColors(Display *, XWindowAttributes *, XColor **);
-static int Get24bitDirectColors(XColor **);
-static int ReadColors(Display *, Visual *, Colormap, XColor **);
+extern int Image_Size (XImage *);
+extern int Get_XColors (Display *, XWindowAttributes *, XColor **);
+static int Get24bitDirectColors (XColor **);
+static int ReadColors (Display *, Visual *, Colormap, XColor **);
 
 
-void
-Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
+mirrorDump *
+Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
 {
-    unsigned long swaptest = 1;
-    XColor *colors;
-    unsigned buffer_size;
-    size_t win_name_size;
-    CARD32 header_size;
-    int ncolors, i;
-    char *win_name;
-    char default_win_name[] = "xwdump";
-    Bool got_win_name;
-    XWindowAttributes win_info;
-    XImage *image;
-    int absx, absy, x, y;
-    unsigned width, height;
-    int dwidth, dheight;
-    Window dummywin;
-    XWDFileHeader header;
-    XWDColor xwdcolor;
+    unsigned long       swaptest = 1;
+    XColor              *colors;
+    unsigned            buffer_size;
+    size_t              win_name_size;
+//    CARD32              header_size;
+    int                 ncolors, i;
+    char                *win_name = NULL;
+//    char                default_win_name[] = "x11mirror-cli";
+    Bool                got_win_name;
+    XWindowAttributes   win_info;
+    XImage              *image;
+    int                 absx, absy, x, y;
+    unsigned            width, height;
+    int                 dwidth, dheight;
+    Window              dummywin;
+    XWDFileHeader       header;
+//    XWDColor            xwdcolor;
+    XWDColor            *xwdcolor;
 
     int                 transparentOverlays , multiVis = 0;
     int                 numVisuals;
@@ -81,6 +84,11 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
     int                 allImage = 0;
 
     Status              status;
+    mirrorDump          *dump = NULL;
+
+    dump = (mirrorDump *)calloc (1, sizeof(mirrorDump));
+    if (dump == NULL)
+        die ("failed to malloc mirrorDump");
 
     /*
      * Get the parameters of the window being dumped.
@@ -92,7 +100,7 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
 #ifndef _NO_ERRORS
 	    fprintf (stderr, "Can't get target window attributes.\n");
 #endif
-        return;
+        return dump;
     }
 
     /* handle any frame window */
@@ -105,7 +113,7 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
 	    fprintf (stderr,
             "unable to translate window coordinates (%d,%d)\n", absx, absy);
 #endif
-        return;
+        return dump;
     }
 
     win_info.x = absx;
@@ -132,15 +140,15 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
 
     XFetchName (dpy, window, &win_name);
     if (!win_name || !win_name[0]) {
-	    win_name = default_win_name;
+//	    win_name = default_win_name;
 	    got_win_name = False;
+        win_name_size = 0;
     }
     else {
 	    got_win_name = True;
+        /* sizeof(char) is included for the null string terminator. */
+        win_name_size = strlen (win_name) + sizeof(char);
     }
-
-    /* sizeof(char) is included for the null string terminator. */
-    win_name_size = strlen(win_name) + sizeof(char);
 
     /*
      * Snarf the pixmap with XGetImage.
@@ -182,13 +190,13 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
 #endif
         if (got_win_name)
             XFree (win_name);
-        return;
+        return dump;
     }
 
     /*
      * Determine the pixmap size.
      */
-    buffer_size = Image_Size(image);
+    buffer_size = Image_Size (image);
 
     debug ("xwd: Getting Colors.\n");
 
@@ -207,13 +215,21 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
      * Calculate header size.
      */
     debug ("xwd: Calculating header size.\n");
-    header_size = SIZEOF(XWDheader) + (CARD32) win_name_size;
+//    header_size = SIZEOF(XWDheader) + (CARD32) win_name_size;
+//    header_size = SIZEOF(XWDheader);
+
+    if (got_win_name) {
+        dump->window_name = win_name;
+        dump->window_name_size = win_name_size;
+    }
+
+    header.header_size = SIZEOF(XWDheader) + (CARD32) win_name_size;
 
     /*
      * Write out header information.
      */
     debug ("xwd: Constructing and dumping file header.\n");
-    header.header_size = (CARD32) header_size;
+//    header.header_size = (CARD32) header_size;
     header.file_version = (CARD32) XWD_FILE_VERSION;
     header.pixmap_format = (CARD32) format;
     header.pixmap_depth = (CARD32) image->depth;
@@ -256,18 +272,36 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
         }
     }
 
+/*
     if (fwrite ((char *)&header, SIZEOF(XWDheader), 1, out) != 1 ||
 	    fwrite (win_name, win_name_size, 1, out) != 1)
     {
 	    perror ("fwrite header/name");
 	    exit (EXIT_FAILURE);
     }
+*/
+
+
+    dump->header = header;
 
     /*
      * Write out the color maps, if any
      */
 
     debug ("xwd: Dumping %d colors.\n", ncolors);
+    dump->xwdcolors = (XWDColor *)calloc (ncolors, sizeof(XWDColor));
+    dump->xwdcolors_count = ncolors;
+    if (dump->xwdcolors == NULL)
+        die ("failed to malloc xwdcolors");
+    for (i = 0, xwdcolor = dump->xwdcolors; i < ncolors; i++, xwdcolor++) {
+        xwdcolor->pixel = colors[i].pixel;
+        xwdcolor->red = colors[i].red;
+        xwdcolor->green = colors[i].green;
+        xwdcolor->blue = colors[i].blue;
+        xwdcolor->flags = colors[i].flags;        
+    }
+
+/*
     for (i = 0; i < ncolors; i++) {
         xwdcolor.pixel = colors[i].pixel;
         xwdcolor.red = colors[i].red;
@@ -279,6 +313,7 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
 	        exit (EXIT_FAILURE);
         }
     }
+*/
 
     /*
      * Write out the buffer.
@@ -291,11 +326,20 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
      *  what other functions of xwd will be taken over by this (as yet)
      *  non-existant X function.
      */
+/*
     if (fwrite (image->data, (int) buffer_size, 1, out) != 1) {
         perror ("fwrite image data");
         exit (EXIT_FAILURE);
     }
+*/
 
+    dump->image_data = (char *)malloc(sizeof(char) * buffer_size);
+    if (dump->image_data == NULL)
+        die ("failed to malloc image data");
+    memcpy (dump->image_data, image->data, buffer_size);
+    dump->image_data_size = buffer_size;
+//    dump->image = image;
+    
     /*
      * free the color buffer.
      */
@@ -306,13 +350,16 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap, FILE *out)
     /*
      * Free window name string.
      */
+/*
     debug ("xwd: Freeing window name string.\n");
     if (got_win_name) XFree (win_name);
+*/
 
     /*
      * Free image
      */
-    XDestroyImage(image);
+    XDestroyImage (image);
+    return dump;
 }
 
 
@@ -371,12 +418,12 @@ Get24bitDirectColors(XColor **colors)
  * Determine the pixmap size.
  */
 int
-Image_Size(XImage *image)
+Image_Size (XImage *image)
 {
     if (image->format != ZPixmap)
-      return(image->bytes_per_line * image->height * image->depth);
+      return (image->bytes_per_line * image->height * image->depth);
 
-    return(image->bytes_per_line * image->height);
+    return (image->bytes_per_line * image->height);
 }
 
 
@@ -442,4 +489,64 @@ Get_XColors(Display *dpy, XWindowAttributes *win_info, XColor **colors)
 	return(0);
     ncolors = ReadColors(dpy, win_info->visual,cmap,colors) ;
     return ncolors ;
+}
+
+
+void
+Free_Dump (mirrorDump *dump)
+{
+    if (dump == NULL)
+        return;
+
+    if (dump->window_name != NULL)
+        XFree (dump->window_name);
+
+    if (dump->image_data != NULL)
+        free (dump->image_data);
+
+    if (dump->image != NULL)
+        XDestroyImage (dump->image);
+
+    if (dump->xwdcolors != NULL)
+        free (dump->xwdcolors);
+
+    free (dump);
+}
+
+void
+Save_Dump (mirrorDump *dump, FILE *out)
+{
+    static char        *name;
+    static size_t      name_size;
+
+
+    if (dump->window_name != NULL) {
+        name = dump->window_name;
+        name_size = dump->window_name_size;
+    }
+    else {
+        name = "x11mirror-client";
+        name_size = strlen (name) + sizeof(char); /* include \0 */
+        dump->header.header_size += (CARD32) name_size;
+    }
+
+    if (fwrite ((char *)&(dump->header), SIZEOF(XWDheader), 1, out) != 1 ||
+	    fwrite (name, name_size, 1, out) != 1)
+    {
+	    perror ("fwrite header/name");
+	    exit (EXIT_FAILURE);
+    }    
+
+    if (fwrite ((char *)dump->xwdcolors, SIZEOF(XWDColor), dump->xwdcolors_count, out)
+        != dump->xwdcolors_count)
+    {
+	    perror ("fwrite xwdcolor");
+	    exit (EXIT_FAILURE);
+    }
+
+//    if (fwrite (dump->image->data, dump->image_data_size, 1, out) != 1) {
+    if (fwrite (dump->image_data, dump->image_data_size, 1, out) != 1) {
+        perror ("fwrite image data");
+        exit (EXIT_FAILURE);
+    }
 }

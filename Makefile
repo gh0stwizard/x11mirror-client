@@ -11,7 +11,7 @@ CFLAGS ?= -Wall -Wextra -std=c99 -pedantic
 
 all: $(PROGRAM)
 
-devel: CFLAGS += -D_DEBUG
+devel: CFLAGS += -D_DEBUG -g
 devel: all
 
 clean:
