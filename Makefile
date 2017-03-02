@@ -6,8 +6,8 @@ OBJECTS = $(patsubst %.c,%.o,$(SOURCES))
 PROGRAM = x11mirror-client
 
 modules = x11 xcomposite xrender xfixes xdamage
-#static_zlib =
 static_zlib = -Wl,-Bstatic,$(shell pkg-config --libs zlib) -Wl,-Bdynamic
+#static_zlib =
 LDLIBS += $(static_zlib) $(shell pkg-config --libs $(modules))
 LDFLAGS ?= 
 CFLAGS ?= -Wall -Wextra -std=c99 -pedantic
