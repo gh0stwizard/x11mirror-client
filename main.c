@@ -2,13 +2,16 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
+
 #include <getopt.h>
 #include <stdarg.h>
 #include <sys/select.h>
+#include <sys/time.h>
+#include <sys/types.h>
 #ifndef _NO_DELAY
 #include <time.h>
 #endif
+#include <unistd.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -167,7 +170,6 @@ main (int argc, char *argv[])
             XNextEvent (dpy, &ev);
             debug ("event for 0x%lx, type = %d\n", ev.xany.window, ev.type);
 
-
             if (ev.type == damageEventType) {
                 Damage d = ((XDamageNotifyEvent *)&ev)->damage;
                 if (d == w_damage) {
@@ -220,7 +222,15 @@ main (int argc, char *argv[])
                 COMPOSITE();
                 break;
             }
-        } while (XPending (dpy));
+        } while (QLength (dpy));
+
+        int fd = ConnectionNumber (dpy);
+        fd_set fdset;
+        FD_ZERO (&fdset);
+        FD_SET (fd, &fdset);
+        struct timeval wtime = { 0, 1000000 };
+        if (select (fd + 1, &fdset, NULL, NULL, &wtime) == 0)
+            save_file (dpy, w_screen, w, w_pixmap);
     } /* while (1) */
 
 #undef COMPOSITE
@@ -278,7 +288,7 @@ xselect_input (Display *d, Window w)
 {
     Window      root, parent, *children;
     unsigned int nchildren;
-    long ev_mask = StructureNotifyMask | 
+    long ev_mask = StructureNotifyMask |
         SubstructureNotifyMask |
 /*
         PointerMotionMask |
@@ -295,7 +305,7 @@ xselect_input (Display *d, Window w)
     for (unsigned int i = 0; i < nchildren; i++) {
         XSelectInput (d, children[i], ev_mask);
         XShapeSelectInput (d, children[i], ShapeNotifyMask);
-    }    
+    }
     XFree (children);
     XUngrabServer (d);
 }
@@ -349,8 +359,12 @@ save_file (Display *d, int screen, Window w, Pixmap p)
         exit (EXIT_FAILURE);
     }
     mirrorDump *dump = Pixmap_Dump (d, screen, w, p);
-    if (dump)
+    if (dump) {
         Save_Dump (dump, out_file);
+/*
+        printf ("file saved.\n");
+*/
+    }
     Free_Dump (dump);
     fclose (out_file);
     rename (OUTFILE "~", OUTFILE);

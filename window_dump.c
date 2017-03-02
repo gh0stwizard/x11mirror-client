@@ -52,7 +52,6 @@ static int ReadColors (Display *, Visual *, Colormap, XColor **);
 mirrorDump *
 Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
 {
-    unsigned long       swaptest = 1;
     XColor              *colors;
     size_t              win_name_size;
     int                 ncolors, i;
@@ -64,9 +63,7 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
     unsigned            width, height;
     int                 dwidth, dheight;
     Window              dummywin;
-
     XWDColor            *xwdcolor;
-
     int                 transparentOverlays , multiVis = 0;
     int                 numVisuals;
     XVisualInfo         *pVisuals;
@@ -81,7 +78,6 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
 
     Status              status;
     mirrorDump          *dump = NULL;
-
 
     /*
      * Get the parameters of the window being dumped.
@@ -201,11 +197,6 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
         debug ("xwd: Using fake visual colors.\n");
     }
 
-    /*
-     * Calculate header size.
-     */
-    debug ("xwd: Calculating header size.\n");
-
     if (got_win_name) {
         dump->window_name = win_name;
         dump->window_name_size = win_name_size;
@@ -214,7 +205,6 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
     /*
      * Write out header information.
      */
-    debug ("xwd: Constructing and dumping file header.\n");
 
     dump->header.header_size = SIZEOF(XWDheader) + (CARD32) win_name_size;
     dump->header.file_version = (CARD32) XWD_FILE_VERSION;
@@ -251,12 +241,10 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
     dump->header.window_y = absy;
     dump->header.window_bdrwidth = (CARD32) win_info.border_width;
 
-    if (*(char *) &swaptest) {
-        _swaplong ((char *) &(dump->header), sizeof(dump->header));
-        for (i = 0; i < ncolors; i++) {
-            _swaplong ((char *) &colors[i].pixel, sizeof(CARD32));
-            _swapshort ((char *) &colors[i].red, 3 * sizeof(short));
-        }
+    _swaplong ((char *) &(dump->header), sizeof(dump->header));
+    for (i = 0; i < ncolors; i++) {
+        _swaplong ((char *) &colors[i].pixel, sizeof(CARD32));
+        _swapshort ((char *) &colors[i].red, 3 * sizeof(short));
     }
 
     dump->xwdcolors = (XWDColor *)calloc (ncolors, sizeof(XWDColor));
@@ -441,6 +429,8 @@ Free_Dump (mirrorDump *dump)
 void
 Save_Dump (mirrorDump *dump, FILE *out)
 {
+    debug ("xwd: Dumping file header.\n");
+
     if (fwrite ((char *)&(dump->header), SIZEOF(XWDheader), 1, out) != 1) {
 	    perror ("fwrite header");
 	    exit (EXIT_FAILURE);
@@ -452,7 +442,7 @@ Save_Dump (mirrorDump *dump, FILE *out)
         }
     }
 
-    debug ("xwd: Dumping %d colors.\n", dump->xwdcolors_count);
+    debug ("xwd: Dumping %lu colors.\n", dump->xwdcolors_count);
 
     if (fwrite ((char *)dump->xwdcolors, SIZEOF(XWDColor), dump->xwdcolors_count, out)
         != dump->xwdcolors_count)
@@ -461,7 +451,7 @@ Save_Dump (mirrorDump *dump, FILE *out)
 	    exit (EXIT_FAILURE);
     }
 
-    debug ("xwd: Dumping pixmap.  bufsize = %d\n", dump->image_data_size);
+    debug ("xwd: Dumping pixmap.  bufsize = %lu\n", dump->image_data_size);
 
     if (fwrite (dump->image->data, dump->image_data_size, 1, out) != 1) {
         perror ("fwrite image data");
