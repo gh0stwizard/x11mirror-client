@@ -2,6 +2,7 @@
 #define __WINDOW_DUMP_H
 
 #include <stdio.h>
+#include <X11/Xlib.h>
 #include <X11/XWDFile.h>
 
 typedef struct mirror_dump_s {

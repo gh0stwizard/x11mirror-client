@@ -23,6 +23,8 @@
 #include "common.h"
 #include "window_dump.h"
 
+#include "compression.h"
+
 /* is there compositor manager */
 static Bool test_cm (Display *d);
 /* load necessary x11's extensions */
@@ -62,6 +64,10 @@ static inline Bool is_ready (void);
 #endif
 
 
+static Bool use_zlib = False;
+static unsigned zlevel = 7;
+
+
 extern int
 main (int argc, char *argv[])
 {
@@ -79,10 +85,16 @@ main (int argc, char *argv[])
     Damage      w_damage, pixmap_damage;
     Bool        synchronize = False;
 
-    while ( (opt = getopt (argc, argv, "d:o:w:S")) != -1 ) {
+
+    while ( (opt = getopt (argc, argv, "d:o:w:Z:Sz")) != -1 ) {
         switch (opt) {
         case 'd':
             display = optarg;
+            break;
+        case 'Z':
+            sscanf (optarg, "%u", &zlevel);
+            if (zlevel <= 0 || zlevel >= 9)
+                die ("Invalid zlib compression level: %s.\n", optarg);
             break;
         case 'o':
             out_file_name = optarg;
@@ -92,10 +104,13 @@ main (int argc, char *argv[])
             if (w == 0)
                 sscanf (optarg, "%lu", &w);
             if (w == 0)
-                die ("Invalid window id: %s.", optarg);
+                die ("Invalid window id: %s.\n", optarg);
             break;
         case 'S':
             synchronize = True;
+            break;
+        case 'z':
+            use_zlib = True;
             break;
         default: /* '?' */
             fprintf (stderr, "Usage: %s [-w window] [OPTIONS]\n", argv[0]);
@@ -385,7 +400,11 @@ save_file (Display *d, int screen, Window w, Pixmap p)
 
     if ((dump = Pixmap_Dump (d, screen, w, p)) != NULL) {
         rewind (out_file);
-        Save_Dump (dump, out_file);
+
+        if (use_zlib)
+            save_gzip_file (dump, out_file, zlevel);
+        else
+            Save_Dump (dump, out_file);
     }
 
     Free_Dump (dump);

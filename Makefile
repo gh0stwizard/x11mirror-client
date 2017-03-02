@@ -5,8 +5,9 @@ OBJECTS = $(patsubst %.c,%.o,$(SOURCES))
 PROGRAM = x11mirror-client
 
 modules = x11 xcomposite xrender xfixes xdamage
-LDLIBS += $(shell pkg-config --libs $(modules))
-LDFLAGS ?=
+static_zlib = -Wl,-Bstatic,$(shell pkg-config --libs zlib) -Wl,-Bdynamic
+LDLIBS += $(static_zlib) $(shell pkg-config --libs $(modules))
+LDFLAGS ?= 
 CFLAGS ?= -Wall -Wextra -std=c99 -pedantic
 
 all: $(PROGRAM)
@@ -22,7 +23,8 @@ clean:
 
 window_dump.o:	window_dump.c list.h wsutils.h multiVis.h common.h
 multiVis.o:	multiVis.c list.h wsutils.h multiVis.h
-main.o:		main.c common.h window_dump.h
+main.o:		main.c common.h window_dump.h compression.h
+compression.o:	compression.c window_dump.h common.h compression.h
 
 $(PROGRAM): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LDLIBS)
