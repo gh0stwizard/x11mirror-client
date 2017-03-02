@@ -54,12 +54,9 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
 {
     unsigned long       swaptest = 1;
     XColor              *colors;
-    unsigned            buffer_size;
     size_t              win_name_size;
-//    CARD32              header_size;
     int                 ncolors, i;
     char                *win_name = NULL;
-//    char                default_win_name[] = "x11mirror-cli";
     Bool                got_win_name;
     XWindowAttributes   win_info;
     XImage              *image;
@@ -67,8 +64,7 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
     unsigned            width, height;
     int                 dwidth, dheight;
     Window              dummywin;
-    XWDFileHeader       header;
-//    XWDColor            xwdcolor;
+
     XWDColor            *xwdcolor;
 
     int                 transparentOverlays , multiVis = 0;
@@ -86,16 +82,12 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
     Status              status;
     mirrorDump          *dump = NULL;
 
-    dump = (mirrorDump *)calloc (1, sizeof(mirrorDump));
-    if (dump == NULL)
-        die ("failed to malloc mirrorDump");
 
     /*
      * Get the parameters of the window being dumped.
      */
     debug ("xwd: Getting target window information.\n");
     status = XGetWindowAttributes (dpy, window, &win_info);
-    debug ("xwd:    status = %d\n", status);
     if (!status) {
 #ifndef _NO_ERRORS
 	    fprintf (stderr, "Can't get target window attributes.\n");
@@ -107,7 +99,6 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
     debug ("xwd: Getting target window coordinates.\n");
     status = XTranslateCoordinates (dpy, window, RootWindow (dpy, screen),
         0, 0, &absx, &absy, &dummywin);
-    debug ("xwd:    status = %d\n", status);
     if (!status) {
 #ifndef _NO_ERRORS
 	    fprintf (stderr,
@@ -140,7 +131,6 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
 
     XFetchName (dpy, window, &win_name);
     if (!win_name || !win_name[0]) {
-//	    win_name = default_win_name;
 	    got_win_name = False;
         win_name_size = 0;
     }
@@ -193,10 +183,10 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
         return dump;
     }
 
-    /*
-     * Determine the pixmap size.
-     */
-    buffer_size = Image_Size (image);
+    /* allocate dump structure  when we have got XImage only */
+    dump = (mirrorDump *)calloc (1, sizeof(mirrorDump));
+    if (dump == NULL)
+        die ("failed to malloc mirrorDump");
 
     debug ("xwd: Getting Colors.\n");
 
@@ -215,84 +205,66 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
      * Calculate header size.
      */
     debug ("xwd: Calculating header size.\n");
-//    header_size = SIZEOF(XWDheader) + (CARD32) win_name_size;
-//    header_size = SIZEOF(XWDheader);
 
     if (got_win_name) {
         dump->window_name = win_name;
         dump->window_name_size = win_name_size;
     }
 
-    header.header_size = SIZEOF(XWDheader) + (CARD32) win_name_size;
-
     /*
      * Write out header information.
      */
     debug ("xwd: Constructing and dumping file header.\n");
-//    header.header_size = (CARD32) header_size;
-    header.file_version = (CARD32) XWD_FILE_VERSION;
-    header.pixmap_format = (CARD32) format;
-    header.pixmap_depth = (CARD32) image->depth;
-    header.pixmap_width = (CARD32) image->width;
-    header.pixmap_height = (CARD32) image->height;
-    header.xoffset = (CARD32) image->xoffset;
-    header.byte_order = (CARD32) image->byte_order;
-    header.bitmap_unit = (CARD32) image->bitmap_unit;
-    header.bitmap_bit_order = (CARD32) image->bitmap_bit_order;
-    header.bitmap_pad = (CARD32) image->bitmap_pad;
-    header.bits_per_pixel = (CARD32) image->bits_per_pixel;
-    header.bytes_per_line = (CARD32) image->bytes_per_line;
-    /****
-    header.visual_class = (CARD32) win_info.visual->class;
-    header.red_mask = (CARD32) win_info.visual->red_mask;
-    header.green_mask = (CARD32) win_info.visual->green_mask;
-    header.blue_mask = (CARD32) win_info.visual->blue_mask;
-    header.bits_per_rgb = (CARD32) win_info.visual->bits_per_rgb;
-    header.colormap_entries = (CARD32) win_info.visual->map_entries;
-    *****/
-    header.visual_class = (CARD32) vis->class;
-    header.red_mask = (CARD32) vis->red_mask;
-    header.green_mask = (CARD32) vis->green_mask;
-    header.blue_mask = (CARD32) vis->blue_mask;
-    header.bits_per_rgb = (CARD32) vis->bits_per_rgb;
-    header.colormap_entries = (CARD32) vis->map_entries;
 
-    header.ncolors = ncolors;
-    header.window_width = (CARD32) win_info.width;
-    header.window_height = (CARD32) win_info.height;
-    header.window_x = absx;
-    header.window_y = absy;
-    header.window_bdrwidth = (CARD32) win_info.border_width;
+    dump->header.header_size = SIZEOF(XWDheader) + (CARD32) win_name_size;
+    dump->header.file_version = (CARD32) XWD_FILE_VERSION;
+    dump->header.pixmap_format = (CARD32) format;
+    dump->header.pixmap_depth = (CARD32) image->depth;
+    dump->header.pixmap_width = (CARD32) image->width;
+    dump->header.pixmap_height = (CARD32) image->height;
+    dump->header.xoffset = (CARD32) image->xoffset;
+    dump->header.byte_order = (CARD32) image->byte_order;
+    dump->header.bitmap_unit = (CARD32) image->bitmap_unit;
+    dump->header.bitmap_bit_order = (CARD32) image->bitmap_bit_order;
+    dump->header.bitmap_pad = (CARD32) image->bitmap_pad;
+    dump->header.bits_per_pixel = (CARD32) image->bits_per_pixel;
+    dump->header.bytes_per_line = (CARD32) image->bytes_per_line;
+    /****
+    dump->header.visual_class = (CARD32) win_info.visual->class;
+    dump->header.red_mask = (CARD32) win_info.visual->red_mask;
+    dump->header.green_mask = (CARD32) win_info.visual->green_mask;
+    dump->header.blue_mask = (CARD32) win_info.visual->blue_mask;
+    dump->header.bits_per_rgb = (CARD32) win_info.visual->bits_per_rgb;
+    dump->header.colormap_entries = (CARD32) win_info.visual->map_entries;
+    *****/
+    dump->header.visual_class = (CARD32) vis->class;
+    dump->header.red_mask = (CARD32) vis->red_mask;
+    dump->header.green_mask = (CARD32) vis->green_mask;
+    dump->header.blue_mask = (CARD32) vis->blue_mask;
+    dump->header.bits_per_rgb = (CARD32) vis->bits_per_rgb;
+    dump->header.colormap_entries = (CARD32) vis->map_entries;
+
+    dump->header.ncolors = ncolors;
+    dump->header.window_width = (CARD32) win_info.width;
+    dump->header.window_height = (CARD32) win_info.height;
+    dump->header.window_x = absx;
+    dump->header.window_y = absy;
+    dump->header.window_bdrwidth = (CARD32) win_info.border_width;
 
     if (*(char *) &swaptest) {
-        _swaplong ((char *) &header, sizeof(header));
+        _swaplong ((char *) &(dump->header), sizeof(dump->header));
         for (i = 0; i < ncolors; i++) {
             _swaplong ((char *) &colors[i].pixel, sizeof(CARD32));
             _swapshort ((char *) &colors[i].red, 3 * sizeof(short));
         }
     }
 
-/*
-    if (fwrite ((char *)&header, SIZEOF(XWDheader), 1, out) != 1 ||
-	    fwrite (win_name, win_name_size, 1, out) != 1)
-    {
-	    perror ("fwrite header/name");
-	    exit (EXIT_FAILURE);
-    }
-*/
-
-
-    dump->header = header;
-
-    /*
-     * Write out the color maps, if any
-     */
-
-    debug ("xwd: Dumping %d colors.\n", ncolors);
     dump->xwdcolors = (XWDColor *)calloc (ncolors, sizeof(XWDColor));
-    dump->xwdcolors_count = ncolors;
     if (dump->xwdcolors == NULL)
         die ("failed to malloc xwdcolors");
+
+    dump->xwdcolors_count = ncolors;
+
     for (i = 0, xwdcolor = dump->xwdcolors; i < ncolors; i++, xwdcolor++) {
         xwdcolor->pixel = colors[i].pixel;
         xwdcolor->red = colors[i].red;
@@ -301,44 +273,8 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
         xwdcolor->flags = colors[i].flags;        
     }
 
-/*
-    for (i = 0; i < ncolors; i++) {
-        xwdcolor.pixel = colors[i].pixel;
-        xwdcolor.red = colors[i].red;
-        xwdcolor.green = colors[i].green;
-        xwdcolor.blue = colors[i].blue;
-        xwdcolor.flags = colors[i].flags;
-	    if (fwrite ((char *) &xwdcolor, SIZEOF(XWDColor), 1, out) != 1) {
-	        perror ("fwrite xwdcolor");
-	        exit (EXIT_FAILURE);
-        }
-    }
-*/
-
-    /*
-     * Write out the buffer.
-     */
-    debug ("xwd: Dumping pixmap.  bufsize = %d\n", buffer_size);
-
-    /*
-     *    This copying of the bit stream (data) to a file is to be replaced
-     *  by an Xlib call which hasn't been written yet.  It is not clear
-     *  what other functions of xwd will be taken over by this (as yet)
-     *  non-existant X function.
-     */
-/*
-    if (fwrite (image->data, (int) buffer_size, 1, out) != 1) {
-        perror ("fwrite image data");
-        exit (EXIT_FAILURE);
-    }
-*/
-
-    dump->image_data = (char *)malloc(sizeof(char) * buffer_size);
-    if (dump->image_data == NULL)
-        die ("failed to malloc image data");
-    memcpy (dump->image_data, image->data, buffer_size);
-    dump->image_data_size = buffer_size;
-//    dump->image = image;
+    dump->image = image;
+    dump->image_data_size = Image_Size (image);
     
     /*
      * free the color buffer.
@@ -347,18 +283,6 @@ Pixmap_Dump (Display *dpy, int screen, Window window, Pixmap pixmap)
     if (ncolors > 0) debug ("xwd: Freeing colors.\n");
     if (ncolors > 0) free (colors);
 
-    /*
-     * Free window name string.
-     */
-/*
-    debug ("xwd: Freeing window name string.\n");
-    if (got_win_name) XFree (win_name);
-*/
-
-    /*
-     * Free image
-     */
-    XDestroyImage (image);
     return dump;
 }
 
@@ -513,29 +437,22 @@ Free_Dump (mirrorDump *dump)
     free (dump);
 }
 
+
 void
 Save_Dump (mirrorDump *dump, FILE *out)
 {
-    static char        *name;
-    static size_t      name_size;
-
+    if (fwrite ((char *)&(dump->header), SIZEOF(XWDheader), 1, out) != 1) {
+	    perror ("fwrite header");
+	    exit (EXIT_FAILURE);
+    }
 
     if (dump->window_name != NULL) {
-        name = dump->window_name;
-        name_size = dump->window_name_size;
-    }
-    else {
-        name = "x11mirror-client";
-        name_size = strlen (name) + sizeof(char); /* include \0 */
-        dump->header.header_size += (CARD32) name_size;
+	    if (fwrite (dump->window_name, dump->window_name_size, 1, out) != 1) {
+            perror ("fwrite name");
+        }
     }
 
-    if (fwrite ((char *)&(dump->header), SIZEOF(XWDheader), 1, out) != 1 ||
-	    fwrite (name, name_size, 1, out) != 1)
-    {
-	    perror ("fwrite header/name");
-	    exit (EXIT_FAILURE);
-    }    
+    debug ("xwd: Dumping %d colors.\n", dump->xwdcolors_count);
 
     if (fwrite ((char *)dump->xwdcolors, SIZEOF(XWDColor), dump->xwdcolors_count, out)
         != dump->xwdcolors_count)
@@ -544,8 +461,9 @@ Save_Dump (mirrorDump *dump, FILE *out)
 	    exit (EXIT_FAILURE);
     }
 
-//    if (fwrite (dump->image->data, dump->image_data_size, 1, out) != 1) {
-    if (fwrite (dump->image_data, dump->image_data_size, 1, out) != 1) {
+    debug ("xwd: Dumping pixmap.  bufsize = %d\n", dump->image_data_size);
+
+    if (fwrite (dump->image->data, dump->image_data_size, 1, out) != 1) {
         perror ("fwrite image data");
         exit (EXIT_FAILURE);
     }

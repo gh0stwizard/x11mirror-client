@@ -6,7 +6,7 @@
 #include <getopt.h>
 #include <stdarg.h>
 #include <sys/select.h>
-#ifndef _NO_SLEEP
+#ifndef _NO_DELAY
 #include <time.h>
 #endif
 #include <X11/Xlib.h>
@@ -40,6 +40,18 @@ static int damage_event, damage_error;
 static int xshape_event, xshape_error;
 
 static FILE *out_file;
+
+#ifndef _NO_DELAY
+#ifndef _DELAY_NSEC
+/* very low numbers may lead to lags */
+#define _DELAY_NSEC 1000 * 1000000
+#endif
+#ifndef _DELAY_SEC
+#define _DELAY_SEC 0
+#endif
+static struct timespec tp_old, tp_current;
+static inline Bool is_ready (void);
+#endif
 
 
 extern int
@@ -145,15 +157,24 @@ main (int argc, char *argv[])
     0, 0, 0, 0, \
     0, 0, wa.width, wa.height)
 
+#ifndef _NO_DELAY
+    if (clock_gettime (CLOCK_MONOTONIC_COARSE, &tp_old) != 0)
+        die ("clock_gettime has fail");
+#endif
+
     while (1) {
         do {
             XNextEvent (dpy, &ev);
             debug ("event for 0x%lx, type = %d\n", ev.xany.window, ev.type);
 
+
             if (ev.type == damageEventType) {
                 Damage d = ((XDamageNotifyEvent *)&ev)->damage;
                 if (d == w_damage) {
                     debug ("  damage event for the window\n");
+#ifndef _NO_DELAY
+                    if (is_ready ())
+#endif
                     COMPOSITE();
                 }
                 else if (d == pixmap_damage) {
@@ -193,19 +214,13 @@ main (int argc, char *argv[])
                     goto done;
                 break;
             default:
+#ifndef _NO_DELAY
+                if (is_ready ())
+#endif
                 COMPOSITE();
                 break;
             }
         } while (XPending (dpy));
-
-#ifndef _NO_SLEEP
-        /* things go very fast... */
-        struct timespec sleeptime = {
-            .tv_sec = 0,
-            .tv_nsec = 500 * 1000000
-        };
-        nanosleep (&sleeptime, NULL);
-#endif
     } /* while (1) */
 
 #undef COMPOSITE
@@ -385,3 +400,23 @@ xerror_handler (Display *dpy, XErrorEvent *ev)
 #endif
     return 0;
 }
+
+
+#ifndef _NO_DELAY
+static inline Bool
+is_ready (void)
+{
+    if (clock_gettime (CLOCK_MONOTONIC_COARSE, &tp_current) != 0)
+        die ("clock_gettime has fail");
+
+    if (((tp_current.tv_sec - tp_old.tv_sec) > _DELAY_SEC) ||
+        ((tp_current.tv_nsec - tp_old.tv_nsec) > _DELAY_NSEC))
+    {
+        if (clock_gettime (CLOCK_MONOTONIC_COARSE, &tp_old) != 0)
+            die ("clock_gettime has fail");
+        return True;
+    }
+
+    return False;
+}
+#endif
