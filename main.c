@@ -60,13 +60,13 @@ static inline Bool is_ready (void);
 #endif
 
 #ifndef _OUTPUT_FILE
-#define _OUTPUT_FILE "/run/user/1000/x11mirror.xwd"
+#define _OUTPUT_FILE "/tmp/x11mirror.xwd"
 #endif
 
-
+#ifndef _NO_ZLIB
 static Bool use_zlib = False;
 static unsigned zlevel = 7;
-
+#endif
 
 extern int
 main (int argc, char *argv[])
@@ -91,11 +91,13 @@ main (int argc, char *argv[])
         case 'd':
             display = optarg;
             break;
+#ifndef _NO_ZLIB
         case 'Z':
             sscanf (optarg, "%u", &zlevel);
             if (zlevel <= 0 || zlevel >= 9)
                 die ("Invalid zlib compression level: %s.\n", optarg);
             break;
+#endif
         case 'o':
             out_file_name = optarg;
             break;
@@ -109,17 +111,25 @@ main (int argc, char *argv[])
         case 'S':
             synchronize = True;
             break;
+#ifndef _NO_ZLIB
         case 'z':
             use_zlib = True;
             break;
+#endif
         default: /* '?' */
             fprintf (stderr, "Usage: %s [-w window] [OPTIONS]\n", argv[0]);
             fprintf (stderr, "Options:\n");
 #define desc(o,d) fprintf (stderr, "\t%-16s\t%s\n", o, d);
             desc ("-d display", "connection string to X11");
-            desc ("-o output", "output filename");
-            desc ("-w window", "target window id");
-            desc ("-S", "enable X11 synchronization");
+            desc ("-o output", "output filename, default: " _OUTPUT_FILE);
+            desc ("-w window", "target window id, default is root");
+#ifndef _NO_ZLIB
+            desc ("-z", "enable gzip (zlib) compression, by default disabled");
+#endif
+            desc ("-S", "enable X11 synchronization, by default disabled");
+#ifndef _NO_ZLIB
+            desc ("-Z", "zlib compression level (1-9), default 7");
+#endif
 #undef desc
             exit (EXIT_FAILURE);
         }
@@ -400,10 +410,11 @@ save_file (Display *d, int screen, Window w, Pixmap p)
 
     if ((dump = Pixmap_Dump (d, screen, w, p)) != NULL) {
         rewind (out_file);
-
+#ifndef _NO_ZLIB
         if (use_zlib)
             save_gzip_file (dump, out_file, zlevel);
         else
+#endif
             Save_Dump (dump, out_file);
     }
 
