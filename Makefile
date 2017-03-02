@@ -4,7 +4,7 @@ SOURCES = $(wildcard *.c)
 OBJECTS = $(patsubst %.c,%.o,$(SOURCES))
 PROGRAM = x11mirror-client
 
-modules = x11 xcomposite xrender xfixes xdamage xext
+modules = x11 xcomposite xrender xfixes xdamage
 LDLIBS += $(shell pkg-config --libs $(modules))
 LDFLAGS ?=
 CFLAGS ?= -Wall -Wextra -std=c99 -pedantic

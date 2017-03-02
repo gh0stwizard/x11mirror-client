@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-
+#include <limits.h>
 #include <getopt.h>
 #include <stdarg.h>
 #include <sys/select.h>
@@ -40,8 +40,9 @@ static int composite_opcode, composite_event, composite_error;
 static int render_event, render_error;
 static int xfixes_event, xfixes_error;
 static int damage_event, damage_error;
-static int xshape_event, xshape_error;
+/*static int xshape_event, xshape_error;*/
 
+static char *out_file_name;
 static FILE *out_file;
 
 #ifndef _NO_DELAY
@@ -54,6 +55,10 @@ static FILE *out_file;
 #endif
 static struct timespec tp_old, tp_current;
 static inline Bool is_ready (void);
+#endif
+
+#ifndef _OUTPUT_FILE
+#define _OUTPUT_FILE "/run/user/1000/x11mirror.xwd"
 #endif
 
 
@@ -74,10 +79,13 @@ main (int argc, char *argv[])
     Damage      w_damage, pixmap_damage;
     Bool        synchronize = False;
 
-    while ( (opt = getopt (argc, argv, "d:w:S")) != -1 ) {
+    while ( (opt = getopt (argc, argv, "d:o:w:S")) != -1 ) {
         switch (opt) {
         case 'd':
             display = optarg;
+            break;
+        case 'o':
+            out_file_name = optarg;
             break;
         case 'w':
             sscanf (optarg, "0x%lx", &w);
@@ -94,11 +102,26 @@ main (int argc, char *argv[])
             fprintf (stderr, "Options:\n");
 #define desc(o,d) fprintf (stderr, "\t%-16s\t%s\n", o, d);
             desc ("-d display", "connection string to X11");
+            desc ("-o output", "output filename");
             desc ("-w window", "target window id");
             desc ("-S", "enable X11 synchronization");
 #undef desc
             exit (EXIT_FAILURE);
         }
+    }
+
+    if (out_file_name == NULL) {
+        out_file_name = _OUTPUT_FILE;
+    }
+    else {
+        int len = strlen (out_file_name);
+        if (len <= 0 && len >= PATH_MAX)
+            die ("invalid length of output filename.\n");
+    }
+
+    if (!(out_file = fopen (out_file_name, "wb"))) {
+        perror ("fopen output filename");
+        exit (EXIT_FAILURE);
     }
 
     dpy = XOpenDisplay (display);
@@ -110,7 +133,7 @@ main (int argc, char *argv[])
 
     load_x11_extensions (dpy);
     const int damageEventType = damage_event + XDamageNotify;
-    const int shapeEventType = xshape_event + ShapeNotify;
+/*    const int shapeEventType = xshape_event + ShapeNotify;*/
 
     if (w == 0) {
         w = RootWindow (dpy, DefaultScreen (dpy));
@@ -185,10 +208,12 @@ main (int argc, char *argv[])
                 }
                 continue;
             }
+/*
             else if (ev.type == shapeEventType) {
                 debug ("  shape event\n");
                 continue;
             }
+*/
 
             switch (ev.type) {
             case ConfigureNotify:
@@ -244,6 +269,7 @@ done:
     XRenderFreePicture (dpy, w_picture);
     XSync (dpy, False);
     XCloseDisplay (dpy);
+    fclose (out_file);
     return 0;
 }
 
@@ -276,10 +302,12 @@ load_x11_extensions (Display *dpy)
     XDamageQueryVersion (dpy, &major_version, &minor_version);
     debug ("using DAMAGE %d.%d\n", major_version, minor_version);
 
+/*
     if (!XShapeQueryExtension (dpy, &xshape_event, &xshape_error))
         die ("SHAPE extension is not installed.\n");
     XShapeQueryVersion (dpy, &major_version, &minor_version);
     debug ("using SHAPE %d.%d\n", major_version, minor_version);
+*/
 }
 
 
@@ -300,11 +328,11 @@ xselect_input (Display *d, Window w)
 
     XGrabServer (d);
     XSelectInput (d, w, ev_mask);
-    XShapeSelectInput (d, w, ShapeNotifyMask);
+/*    XShapeSelectInput (d, w, ShapeNotifyMask);*/
     XQueryTree (d, w, &root, &parent, &children, &nchildren);
     for (unsigned int i = 0; i < nchildren; i++) {
         XSelectInput (d, children[i], ev_mask);
-        XShapeSelectInput (d, children[i], ShapeNotifyMask);
+/*        XShapeSelectInput (d, children[i], ShapeNotifyMask);*/
     }
     XFree (children);
     XUngrabServer (d);
@@ -353,22 +381,15 @@ test_cm (Display *dpy)
 static inline void
 save_file (Display *d, int screen, Window w, Pixmap p)
 {
-#define OUTFILE "/run/user/1000/x11mirror.xwd"
-    if (!(out_file = fopen (OUTFILE "~", "wb"))) {
-        perror ("fopen");
-        exit (EXIT_FAILURE);
-    }
-    mirrorDump *dump = Pixmap_Dump (d, screen, w, p);
-    if (dump) {
+    static mirrorDump *dump;
+
+    if ((dump = Pixmap_Dump (d, screen, w, p)) != NULL) {
+        rewind (out_file);
         Save_Dump (dump, out_file);
-/*
-        printf ("file saved.\n");
-*/
     }
+
     Free_Dump (dump);
-    fclose (out_file);
-    rename (OUTFILE "~", OUTFILE);
-#undef OUTFILE
+    fflush (out_file);
 }
 
 
