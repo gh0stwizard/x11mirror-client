@@ -22,8 +22,9 @@
 
 #include "common.h"
 #include "window_dump.h"
-
+#ifndef _NO_ZLIB
 #include "compression.h"
+#endif
 
 /* is there compositor manager */
 static Bool test_cm (Display *d);

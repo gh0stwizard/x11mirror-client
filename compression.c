@@ -1,3 +1,4 @@
+#ifndef _NO_ZLIB
 #define _POSIX_C_SOURCE 1
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,3 +69,5 @@ save_gzip_file (mirrorDump* dump, FILE *out, int level)
 
     return 0;
 }
+
+#endif /* _NO_ZLIB */
