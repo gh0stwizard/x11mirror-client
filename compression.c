@@ -23,7 +23,7 @@ save_gzip_file (mirrorDump* dump, FILE *out, int level)
 
     gzFile gz_file = gzdopen (fd, "wb");
     if (gz_file == NULL)
-        die ("gzdopen failed.\n");
+        die ("gzdopen failed.");
 
     gzrewind (gz_file);
     gzsetparams (gz_file, level, Z_DEFAULT_STRATEGY);
@@ -34,7 +34,7 @@ save_gzip_file (mirrorDump* dump, FILE *out, int level)
     if (gzfwrite ((char *)&(dump->header), SIZEOF(XWDheader), 1, gz_file) == 0)
 */
     if (gzwrite (gz_file, (char *)&(dump->header), SIZEOF(XWDheader)) == 0)
-        die ("gzfwrite failed to write header: %s\n", gzerror (gz_file, &errnum));
+        die ("gzfwrite failed to write header: %s", gzerror (gz_file, &errnum));
 
     if (dump->window_name != NULL) {
 /*
@@ -42,7 +42,7 @@ save_gzip_file (mirrorDump* dump, FILE *out, int level)
             1, gz_file) == 0)
 */
 	    if (gzwrite (gz_file, dump->window_name, dump->window_name_size) == 0)
-            die ("gzfwrite failed to write window name: %s\n",
+            die ("gzfwrite failed to write window name: %s",
                 gzerror (gz_file, &errnum));
     }
 
@@ -53,7 +53,7 @@ save_gzip_file (mirrorDump* dump, FILE *out, int level)
 */
     if (gzwrite (gz_file, (char *)dump->xwdcolors,
         SIZEOF(XWDColor) * dump->xwdcolors_count) == 0)
-        die ("gzfwrite failed to write colors: %s\n", gzerror (gz_file, &errnum));
+        die ("gzfwrite failed to write colors: %s", gzerror (gz_file, &errnum));
 
     debug ("gzip: Dumping pixmap.  bufsize = %lu\n", dump->image_data_size);
 
@@ -61,7 +61,7 @@ save_gzip_file (mirrorDump* dump, FILE *out, int level)
     if (gzfwrite (dump->image->data, dump->image_data_size, 1, gz_file) == 0)
 */
     if (gzwrite (gz_file, dump->image->data, dump->image_data_size) == 0)
-        die ("gzfwrite failed to write pixmap: %s\n", gzerror (gz_file, &errnum));
+        die ("gzfwrite failed to write pixmap: %s", gzerror (gz_file, &errnum));
 
     gzflush (gz_file, Z_FINISH);
     gzclose_w (gz_file);

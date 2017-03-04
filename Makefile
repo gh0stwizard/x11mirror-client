@@ -9,6 +9,7 @@ modules = x11 xcomposite xrender xfixes xdamage
 static_zlib = -Wl,-Bstatic,$(shell pkg-config --libs zlib) -Wl,-Bdynamic
 #static_zlib =
 LDLIBS += $(static_zlib) $(shell pkg-config --libs $(modules))
+LDLIBS += -lm
 LDFLAGS ?= 
 CFLAGS ?= -Wall -Wextra -std=c99 -pedantic
 #CFLAGS += -D_NO_ZLIB

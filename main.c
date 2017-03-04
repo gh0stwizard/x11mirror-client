@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #ifndef _NO_DELAY
 #include <time.h>
+#include <math.h>
 #endif
 #include <unistd.h>
 #include <X11/Xlib.h>
@@ -35,6 +36,7 @@ static void debug_window (Display *d, Window w, XWindowAttributes *wa);
 static void xselect_input (Display *d, Window w);
 static inline void
 save_file (Display *d, int screen, Window w, Pixmap p);
+/* by default X11 throws error and exit */
 static int
 xerror_handler (Display *dpy, XErrorEvent *ev);
 
@@ -51,13 +53,11 @@ static FILE *out_file;
 #ifndef _NO_DELAY
 #ifndef _DELAY_NSEC
 /* very low numbers may lead to lags */
-#define _DELAY_NSEC 1000 * 1000000
+#define _DELAY_NSEC 0 * 1000000
 #endif
 #ifndef _DELAY_SEC
-#define _DELAY_SEC 0
+#define _DELAY_SEC 1
 #endif
-static struct timespec tp_old, tp_current;
-static inline Bool is_ready (void);
 #endif
 
 #ifndef _OUTPUT_FILE
@@ -85,9 +85,14 @@ main (int argc, char *argv[])
     XRenderPictureAttributes w_pa = { .subwindow_mode = IncludeInferiors };
     Damage      w_damage, pixmap_damage;
     Bool        synchronize = False;
+    unsigned    my_events;
+#ifndef _NO_DELAY
+    time_t      delay_sec = _DELAY_SEC;
+    long        delay_nsec = _DELAY_NSEC;
+#endif
 
 
-    while ( (opt = getopt (argc, argv, "d:o:w:Z:Sz")) != -1 ) {
+    while ( (opt = getopt (argc, argv, "d:o:w:zD:SZ:")) != -1 ) {
         switch (opt) {
         case 'd':
             display = optarg;
@@ -95,8 +100,8 @@ main (int argc, char *argv[])
 #ifndef _NO_ZLIB
         case 'Z':
             sscanf (optarg, "%u", &zlevel);
-            if (zlevel <= 0 || zlevel >= 9)
-                die ("Invalid zlib compression level: %s.\n", optarg);
+            if (zlevel <= 0 || zlevel >= 10)
+                die ("Invalid zlib compression level: %s.", optarg);
             break;
 #endif
         case 'o':
@@ -107,8 +112,24 @@ main (int argc, char *argv[])
             if (w == 0)
                 sscanf (optarg, "%lu", &w);
             if (w == 0)
-                die ("Invalid window id: %s.\n", optarg);
+                die ("Invalid window id: %s.", optarg);
             break;
+#ifndef _NO_DELAY
+        case 'D': {
+            long delay = 0;
+            sscanf (optarg, "%li", &delay);
+            if (delay < 0)
+                die ("Delay must be greater than zero.");
+            else if (delay >= 1000) {
+                delay_sec = lround ((delay - (delay % 1000)) / 1000);
+                delay_nsec = (delay % 1000) * 1000000;
+            }
+            else {
+                delay_sec = 0;
+                delay_nsec = delay * 1000000;
+            }
+        }   break;
+#endif
         case 'S':
             synchronize = True;
             break;
@@ -120,12 +141,15 @@ main (int argc, char *argv[])
         default: /* '?' */
             fprintf (stderr, "Usage: %s [-w window] [OPTIONS]\n", argv[0]);
             fprintf (stderr, "Options:\n");
-#define desc(o,d) fprintf (stderr, "\t%-16s\t%s\n", o, d);
+#define desc(o,d) fprintf (stderr, "  %-16s  %s\n", o, d);
             desc ("-d display", "connection string to X11");
             desc ("-o output", "output filename, default: " _OUTPUT_FILE);
             desc ("-w window", "target window id, default is root");
 #ifndef _NO_ZLIB
             desc ("-z", "enable gzip (zlib) compression, by default disabled");
+#endif
+#ifndef _NO_DELAY
+            desc ("-D", "delay after taking a screenshot in milliseconds");
 #endif
             desc ("-S", "enable X11 synchronization, by default disabled");
 #ifndef _NO_ZLIB
@@ -142,7 +166,7 @@ main (int argc, char *argv[])
     else {
         int len = strlen (out_file_name);
         if (len <= 0 && len >= PATH_MAX)
-            die ("invalid length of output filename.\n");
+            die ("invalid length of output filename.");
     }
 
     if (!(out_file = fopen (out_file_name, "wb"))) {
@@ -152,7 +176,7 @@ main (int argc, char *argv[])
 
     dpy = XOpenDisplay (display);
     if (!dpy)
-        die ("Could not open the display.\n");
+        die ("Could not open the display.");
 
     XSynchronize (dpy, synchronize);
     XSetErrorHandler (xerror_handler);
@@ -190,7 +214,7 @@ main (int argc, char *argv[])
     }
 
     if (w_screen < 0)
-        die ("failed to find out a screen number of the window.\n");
+        die ("failed to find out a screen number of the window.");
 
     xselect_input (dpy, w);
 
@@ -209,37 +233,29 @@ main (int argc, char *argv[])
     0, 0, 0, 0, \
     0, 0, wa.width, wa.height)
 
-#ifndef _NO_DELAY
-    if (clock_gettime (CLOCK_MONOTONIC_COARSE, &tp_old) != 0)
-        die ("clock_gettime has fail");
-#endif
 
     while (1) {
+        my_events = 0;
         do {
             XNextEvent (dpy, &ev);
-            debug ("event for 0x%lx, type = %d\n", ev.xany.window, ev.type);
+            debug ("event for 0x%08lx type: %4d", ev.xany.window, ev.type);
 
             if (ev.type == damageEventType) {
                 Damage d = ((XDamageNotifyEvent *)&ev)->damage;
+
                 if (d == w_damage) {
-                    debug ("  damage event for the window\n");
-#ifndef _NO_DELAY
-                    if (is_ready ())
-#endif
-                    COMPOSITE();
+                    debug (" damage event for the window\n");
+                    my_events |= 1 << 0;
                 }
                 else if (d == pixmap_damage) {
-                    debug ("  damage event for the pixmap\n");
-                    save_file (dpy, w_screen, w, w_pixmap);
+                    debug (" damage event for the pixmap\n");
+                    my_events |= 1 << 1;
                 }
+
                 continue;
             }
-/*
-            else if (ev.type == shapeEventType) {
-                debug ("  shape event\n");
-                continue;
-            }
-*/
+            else
+                debug ("\n");
 
             switch (ev.type) {
             case ConfigureNotify:
@@ -266,22 +282,31 @@ main (int argc, char *argv[])
                 if (ev.xunmap.window == w)
                     goto done;
                 break;
-            default:
-#ifndef _NO_DELAY
-                if (is_ready ())
-#endif
-                COMPOSITE();
-                break;
             }
         } while (QLength (dpy));
 
-        int fd = ConnectionNumber (dpy);
-        fd_set fdset;
-        FD_ZERO (&fdset);
-        FD_SET (fd, &fdset);
-        struct timeval wtime = { 0, 1000000 };
-        if (select (fd + 1, &fdset, NULL, NULL, &wtime) == 0)
+
+        if (my_events == 0) {
+            int fd = ConnectionNumber (dpy);
+            fd_set fdset;
+            FD_ZERO (&fdset);
+            FD_SET (fd, &fdset);
+            struct timeval wtime = { 0, 500000 };
+            select (fd + 1, &fdset, NULL, NULL, &wtime);
+        }
+        else if (my_events & (1 << 1)) {
             save_file (dpy, w_screen, w, w_pixmap);
+#ifndef _NO_DELAY
+            struct timespec wtime = {
+                .tv_sec = delay_sec,
+                .tv_nsec = delay_nsec
+            };
+            nanosleep (&wtime, NULL);
+#endif
+        }
+        else if (my_events & (1 << 0)) {
+            COMPOSITE ();
+        }
     } /* while (1) */
 
 #undef COMPOSITE
@@ -307,33 +332,26 @@ load_x11_extensions (Display *dpy)
 
     if (!XQueryExtension (dpy, COMPOSITE_NAME, 
         &composite_opcode, &composite_event, &composite_error))
-        die ("COMPOSITE extension is not installed.\n");
+        die ("COMPOSITE extension is not installed.");
     XCompositeQueryVersion (dpy, &major_version, &minor_version);
     if (major_version == 0 && minor_version < 4)
-        die ("libXcomposite 0.4 or better is required.\n");
+        die ("libXcomposite 0.4 or better is required.");
     debug ("using COMPOSITE %d.%d\n", major_version, minor_version);
 
     if (!XRenderQueryExtension (dpy, &render_event, &render_error))
-        die ("RENDER extension is not installed.\n");
+        die ("RENDER extension is not installed.");
     XRenderQueryVersion (dpy, &major_version, &minor_version);
     debug ("using RENDER %d.%d\n", major_version, minor_version);
 
     if (!XFixesQueryExtension (dpy, &xfixes_event, &xfixes_error))
-        die ("FIXES extension is not installed.\n");
+        die ("FIXES extension is not installed.");
     XFixesQueryVersion (dpy, &major_version, &minor_version);
     debug ("using FIXES %d.%d\n", major_version, minor_version);
 
     if (!XDamageQueryExtension (dpy, &damage_event, &damage_error))
-        die ("DAMAGE extension is not installed.\n");
+        die ("DAMAGE extension is not installed.");
     XDamageQueryVersion (dpy, &major_version, &minor_version);
     debug ("using DAMAGE %d.%d\n", major_version, minor_version);
-
-/*
-    if (!XShapeQueryExtension (dpy, &xshape_event, &xshape_error))
-        die ("SHAPE extension is not installed.\n");
-    XShapeQueryVersion (dpy, &major_version, &minor_version);
-    debug ("using SHAPE %d.%d\n", major_version, minor_version);
-*/
 }
 
 
@@ -342,27 +360,18 @@ xselect_input (Display *d, Window w)
 {
     Window      root, parent, *children;
     unsigned int nchildren;
-    long ev_mask = StructureNotifyMask |
-        SubstructureNotifyMask |
-/*
-        PointerMotionMask |
-        EnterWindowMask | LeaveWindowMask |
-        FocusChangeMask |
-        PropertyChangeMask |
-*/
-        ExposureMask;
+    long ev_mask = StructureNotifyMask | SubstructureNotifyMask | ExposureMask;
 
     XGrabServer (d);
     XSelectInput (d, w, ev_mask);
-/*    XShapeSelectInput (d, w, ShapeNotifyMask);*/
     XQueryTree (d, w, &root, &parent, &children, &nchildren);
     for (unsigned int i = 0; i < nchildren; i++) {
         XSelectInput (d, children[i], ev_mask);
-/*        XShapeSelectInput (d, children[i], ShapeNotifyMask);*/
     }
     XFree (children);
     XUngrabServer (d);
 }
+
 
 static void
 debug_window (Display *d, Window w, XWindowAttributes *wa)
@@ -466,23 +475,3 @@ xerror_handler (Display *dpy, XErrorEvent *ev)
 #endif
     return 0;
 }
-
-
-#ifndef _NO_DELAY
-static inline Bool
-is_ready (void)
-{
-    if (clock_gettime (CLOCK_MONOTONIC_COARSE, &tp_current) != 0)
-        die ("clock_gettime has fail");
-
-    if (((tp_current.tv_sec - tp_old.tv_sec) > _DELAY_SEC) ||
-        ((tp_current.tv_nsec - tp_old.tv_nsec) > _DELAY_NSEC))
-    {
-        if (clock_gettime (CLOCK_MONOTONIC_COARSE, &tp_old) != 0)
-            die ("clock_gettime has fail");
-        return True;
-    }
-
-    return False;
-}
-#endif
