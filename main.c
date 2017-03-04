@@ -169,21 +169,34 @@ main (int argc, char *argv[])
             die ("invalid length of output filename.");
     }
 
+    debug ("output file: %s\n", out_file_name);
+#ifndef _NO_ZLIB
+    debug ("output file format: %s\n", (use_zlib) ? "zlib" : "xwd");
+#endif
+
     if (!(out_file = fopen (out_file_name, "wb"))) {
         perror ("fopen output filename");
         exit (EXIT_FAILURE);
     }
 
+#ifndef _NO_DELAY
+    debug ("delay between screenshots: %lu.%lu second(s)\n",
+            delay_sec, lround (delay_nsec / 1000000));
+#endif
+
     dpy = XOpenDisplay (display);
     if (!dpy)
         die ("Could not open the display.");
 
-    XSynchronize (dpy, synchronize);
+    if (synchronize) {
+        XSynchronize (dpy, synchronize);
+        debug ("WARNING: X11 synchronization enabled\n");
+    }
+
     XSetErrorHandler (xerror_handler);
 
     load_x11_extensions (dpy);
     const int damageEventType = damage_event + XDamageNotify;
-/*    const int shapeEventType = xshape_event + ShapeNotify;*/
 
     if (w == 0) {
         w = RootWindow (dpy, DefaultScreen (dpy));
@@ -200,14 +213,14 @@ main (int argc, char *argv[])
             CompositeRedirectAutomatic);
     }
 
-    debug ("retrieving attributes for window = 0x%lx\n", w);
+    debug ("retrieving attributes for 0x%lx\n", w);
     XGetWindowAttributes (dpy, w, &wa);
     debug_window (dpy, w, &wa);
 
     for (int i = 0; i < ScreenCount (dpy); i++) {
         if (ScreenOfDisplay (dpy, i) == wa.screen) {
             w_screen = i;
-            debug ("default screen = %d, window screen = %d\n",
+            debug ("default screen = %d, target window screen = %d\n",
                 DefaultScreen (dpy), i);
             break;
         }
@@ -216,6 +229,7 @@ main (int argc, char *argv[])
     if (w_screen < 0)
         die ("failed to find out a screen number of the window.");
 
+    /* select events for the window */
     xselect_input (dpy, w);
 
     format = XRenderFindVisualFormat (dpy, wa.visual);
@@ -386,13 +400,13 @@ debug_window (Display *d, Window w, XWindowAttributes *wa)
 /* TODO: _NET_WM_NAME */
     XFetchName (d, w, &window_name);
     if (window_name != NULL) {
-        debug ("name: %s\n", window_name);
+        debug ("  name: %s\n", window_name);
         XFree (window_name);
     }
-    debug ("x: %d y: %d\n", wa->x, wa->y);
-    debug ("width: %d height: %d\n", wa->width, wa->height);
-    debug ("root: 0x%lx\n", wa->root);
-    debug ("backing store: %s\n", BACKSTORE(wa->backing_store));
+    debug ("  x: %d y: %d\n", wa->x, wa->y);
+    debug ("  width: %d height: %d\n", wa->width, wa->height);
+    debug ("  root: 0x%lx\n", wa->root);
+    debug ("  backing store: %s\n", BACKSTORE(wa->backing_store));
 #undef BACKSTORE
 }
 

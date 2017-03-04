@@ -13,6 +13,7 @@ LDLIBS += -lm
 LDFLAGS ?= 
 CFLAGS ?= -Wall -Wextra -std=c99 -pedantic
 #CFLAGS += -D_NO_ZLIB
+#CFLAGS += -D_NO_DELAY
 
 all: $(PROGRAM)
 
