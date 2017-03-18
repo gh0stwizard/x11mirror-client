@@ -190,7 +190,7 @@ main (int argc, char *argv[])
     /* initialize curl first */
     init_uploader ("http://localhost:8888");
     /* open file in read-write mode */
-    out_file = fopen (out_file_name, "r+b");
+    out_file = fopen (out_file_name, "w+b");
 #else
     /* otherwise we need only write permissions */
     out_file = fopen (out_file_name, "wb");
