@@ -1,4 +1,3 @@
-#define _XOPEN_SOURCE 500
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -25,6 +24,9 @@
 #include "window_dump.h"
 #ifndef _NO_ZLIB
 #include "compression.h"
+#endif
+#ifndef _NO_CURL
+#include "upload.h"
 #endif
 
 /* is there compositor manager */
@@ -68,6 +70,30 @@ static FILE *out_file;
 static Bool use_zlib = False;
 static unsigned zlevel = 7;
 #endif
+
+
+static void
+print_usage (const char *prog)
+{
+	fprintf (stderr, "Usage: %s [-w window] [OPTIONS]\n", prog);
+	fprintf (stderr, "Options:\n");
+#define desc(o,d) fprintf (stderr, "  %-16s  %s\n", o, d);
+	desc ("-d display", "connection string to X11");
+	desc ("-o output", "output filename, default: " _OUTPUT_FILE);
+	desc ("-w window", "target window id, default is root");
+#ifndef _NO_ZLIB
+	desc ("-z", "enable gzip (zlib) compression, by default disabled");
+#endif
+#ifndef _NO_DELAY
+	desc ("-D", "delay after taking a screenshot in milliseconds");
+#endif
+	desc ("-S", "enable X11 synchronization, by default disabled");
+#ifndef _NO_ZLIB
+	desc ("-Z", "zlib compression level (1-9), default 7");
+#endif
+#undef desc
+}
+
 
 extern int
 main (int argc, char *argv[])
@@ -139,23 +165,7 @@ main (int argc, char *argv[])
             break;
 #endif
         default: /* '?' */
-            fprintf (stderr, "Usage: %s [-w window] [OPTIONS]\n", argv[0]);
-            fprintf (stderr, "Options:\n");
-#define desc(o,d) fprintf (stderr, "  %-16s  %s\n", o, d);
-            desc ("-d display", "connection string to X11");
-            desc ("-o output", "output filename, default: " _OUTPUT_FILE);
-            desc ("-w window", "target window id, default is root");
-#ifndef _NO_ZLIB
-            desc ("-z", "enable gzip (zlib) compression, by default disabled");
-#endif
-#ifndef _NO_DELAY
-            desc ("-D", "delay after taking a screenshot in milliseconds");
-#endif
-            desc ("-S", "enable X11 synchronization, by default disabled");
-#ifndef _NO_ZLIB
-            desc ("-Z", "zlib compression level (1-9), default 7");
-#endif
-#undef desc
+            print_usage (argv[0]);
             exit (EXIT_FAILURE);
         }
     }
@@ -165,6 +175,7 @@ main (int argc, char *argv[])
     }
     else {
         int len = strlen (out_file_name);
+
         if (len <= 0 && len >= PATH_MAX)
             die ("invalid length of output filename.");
     }
@@ -174,7 +185,18 @@ main (int argc, char *argv[])
     debug ("output file format: %s\n", (use_zlib) ? "zlib" : "xwd");
 #endif
 
-    if (!(out_file = fopen (out_file_name, "wb"))) {
+
+#ifndef _NO_CURL
+    /* initialize curl first */
+    init_uploader ("http://localhost:8888");
+    /* open file in read-write mode */
+    out_file = fopen (out_file_name, "r+b");
+#else
+    /* otherwise we need only write permissions */
+    out_file = fopen (out_file_name, "wb");
+#endif
+
+    if (out_file == NULL) {
         perror ("fopen output filename");
         exit (EXIT_FAILURE);
     }
@@ -250,8 +272,10 @@ main (int argc, char *argv[])
 
     while (1) {
         my_events = 0;
+
         do {
             XNextEvent (dpy, &ev);
+
             debug ("event for 0x%08lx type: %4d", ev.xany.window, ev.type);
 
             if (ev.type == damageEventType) {
@@ -282,14 +306,14 @@ main (int argc, char *argv[])
                     XRenderFreePicture (dpy, pixmap_picture);
                     XRenderFreePicture (dpy, w_picture);
                     XDamageDestroy (dpy, pixmap_damage);
-                    w_picture =
-                        XRenderCreatePicture (dpy, w, format, CPSubwindowMode, &w_pa);
-                    w_pixmap = 
-                        XCreatePixmap (dpy, w, wa.width, wa.height, wa.depth);
-                    pixmap_picture = 
-                        XRenderCreatePicture (dpy, w_pixmap, format, 0, NULL);
-                    pixmap_damage = 
-                        XDamageCreate (dpy, w_pixmap, XDamageReportRawRectangles);
+                    w_picture = XRenderCreatePicture
+			(dpy, w, format, CPSubwindowMode, &w_pa);
+                    w_pixmap = XCreatePixmap
+			(dpy, w, wa.width, wa.height, wa.depth);
+                    pixmap_picture = XRenderCreatePicture
+			(dpy, w_pixmap, format, 0, NULL);
+                    pixmap_damage = XDamageCreate
+			(dpy, w_pixmap, XDamageReportRawRectangles);
                 }
             }   break;
             case DestroyNotify:
@@ -310,6 +334,10 @@ main (int argc, char *argv[])
         }
         else if (my_events & (1 << 1)) {
             save_file (dpy, w_screen, w, w_pixmap);
+#ifndef _NO_CURL
+            upload_file (out_file);
+#endif
+
 #ifndef _NO_DELAY
             struct timespec wtime = {
                 .tv_sec = delay_sec,
@@ -379,9 +407,11 @@ xselect_input (Display *d, Window w)
     XGrabServer (d);
     XSelectInput (d, w, ev_mask);
     XQueryTree (d, w, &root, &parent, &children, &nchildren);
+
     for (unsigned int i = 0; i < nchildren; i++) {
         XSelectInput (d, children[i], ev_mask);
     }
+
     XFree (children);
     XUngrabServer (d);
 }
@@ -399,10 +429,12 @@ debug_window (Display *d, Window w, XWindowAttributes *wa)
 
 /* TODO: _NET_WM_NAME */
     XFetchName (d, w, &window_name);
+
     if (window_name != NULL) {
         debug ("  name: %s\n", window_name);
         XFree (window_name);
     }
+
     debug ("  x: %d y: %d\n", wa->x, wa->y);
     debug ("  width: %d height: %d\n", wa->width, wa->height);
     debug ("  root: 0x%lx\n", wa->root);
@@ -420,6 +452,7 @@ test_cm (Display *dpy)
     static char name[] = "_NET_WM_CM_Sxx";
 
     snprintf (name, sizeof (name), "_NET_WM_CM_S%d", DefaultScreen (dpy));
+
     if (None == XGetSelectionOwner (dpy, XInternAtom (dpy, name, False)))
         return True;
     else
