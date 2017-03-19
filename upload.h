@@ -7,8 +7,10 @@
 extern void
 init_uploader (const char *url);
 
+extern void
+free_uploader (void);
+
 extern int
 upload_file (FILE *fh);
-
 
 #endif /* XMC_CURL_H */

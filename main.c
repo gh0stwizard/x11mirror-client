@@ -71,6 +71,12 @@ static Bool use_zlib = False;
 static unsigned zlevel = 7;
 #endif
 
+#ifndef _NO_CURL
+#ifndef DEFAULT_URL
+#define DEFAULT_URL "http://localhost"
+#endif
+#endif
+
 
 static void
 print_usage (const char *prog)
@@ -80,6 +86,9 @@ print_usage (const char *prog)
 #define desc(o,d) fprintf (stderr, "  %-16s  %s\n", o, d);
 	desc ("-d display", "connection string to X11");
 	desc ("-o output", "output filename, default: " _OUTPUT_FILE);
+#ifndef _NO_CURL
+    desc ("-u URL", "an URL to send data");
+#endif
 	desc ("-w window", "target window id, default is root");
 #ifndef _NO_ZLIB
 	desc ("-z", "enable gzip (zlib) compression, by default disabled");
@@ -116,9 +125,12 @@ main (int argc, char *argv[])
     time_t      delay_sec = _DELAY_SEC;
     long        delay_nsec = _DELAY_NSEC;
 #endif
+#ifndef _NO_CURL
+    char        *url = NULL;
+#endif
 
 
-    while ( (opt = getopt (argc, argv, "d:o:w:zD:SZ:")) != -1 ) {
+    while ( (opt = getopt (argc, argv, "d:o:u:w:zD:SZ:")) != -1 ) {
         switch (opt) {
         case 'd':
             display = optarg;
@@ -133,6 +145,11 @@ main (int argc, char *argv[])
         case 'o':
             out_file_name = optarg;
             break;
+#ifndef _NO_CURL
+        case 'u':
+            url = optarg;
+    		break;
+#endif
         case 'w':
             sscanf (optarg, "0x%lx", &w);
             if (w == 0)
@@ -140,6 +157,11 @@ main (int argc, char *argv[])
             if (w == 0)
                 die ("Invalid window id: %s.", optarg);
             break;
+#ifndef _NO_ZLIB
+        case 'z':
+            use_zlib = True;
+            break;
+#endif
 #ifndef _NO_DELAY
         case 'D': {
             long delay = 0;
@@ -159,11 +181,6 @@ main (int argc, char *argv[])
         case 'S':
             synchronize = True;
             break;
-#ifndef _NO_ZLIB
-        case 'z':
-            use_zlib = True;
-            break;
-#endif
         default: /* '?' */
             print_usage (argv[0]);
             exit (EXIT_FAILURE);
@@ -188,7 +205,10 @@ main (int argc, char *argv[])
 
 #ifndef _NO_CURL
     /* initialize curl first */
-    init_uploader ("http://localhost:8888");
+    if (url == NULL)
+        url = DEFAULT_URL;
+
+    init_uploader (url);
     /* open file in read-write mode */
     out_file = fopen (out_file_name, "w+b");
 #else
@@ -362,6 +382,9 @@ done:
     XRenderFreePicture (dpy, w_picture);
     XSync (dpy, False);
     XCloseDisplay (dpy);
+#ifndef _NO_CURL
+    free_uploader ();
+#endif
     fclose (out_file);
     return 0;
 }
@@ -483,7 +506,10 @@ save_file (Display *d, int screen, Window w, Pixmap p)
 static int
 xerror_handler (Display *dpy, XErrorEvent *ev)
 {
-#ifndef _NO_ERRORS
+#if defined(_NO_ERRORS)
+    (void) dpy;
+    (void) ev;
+#else
     int         o;
     const char  *name = NULL;
     static char buffer[256];
@@ -520,5 +546,6 @@ xerror_handler (Display *dpy, XErrorEvent *ev)
 	     ev->error_code, (strlen (name) > 0) ? name : "unknown",
 	     ev->request_code, ev->minor_code, ev->serial);
 #endif
+
     return 0;
 }

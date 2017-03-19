@@ -14,6 +14,8 @@ LDLIBS += -lm
 LDFLAGS ?= 
 CFLAGS ?= -Wall -Wextra -std=c99 -pedantic
 CFLAGS += -D_XOPEN_SOURCE=500
+CFLAGS += -D_NO_ERRORS
+#CFLAGS += -D_DEBUG
 #CFLAGS += -D_NO_ZLIB
 #CFLAGS += -D_NO_DELAY
 #CFLAGS += -D_NO_CURL
