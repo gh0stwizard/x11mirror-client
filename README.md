@@ -6,6 +6,8 @@
 This is an X11 program which retrieve an image of specified window
 or a whole display.
 
+[Video demonstration on YouTube](https://youtu.be/4Kz16FlFcjQ)
+
 
 ## Features
 
@@ -63,7 +65,10 @@ shell> make
 
 ## See also
 
-You may found the server to test the program here: [x11mirror-server][]
+1. You may found the server to test the program here: [x11mirror-server][]
+
+2. [Keylogger][] for X11
 
 
 [x11mirror-server]: https://github.com/gh0stwizard/x11mirror-server
+[Keylogger]: https://github.com/xdevelnet/x11k
