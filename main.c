@@ -73,7 +73,7 @@ static unsigned zlevel = 7;
 
 #ifndef _NO_CURL
 #ifndef DEFAULT_URL
-#define DEFAULT_URL "http://localhost"
+#define DEFAULT_URL "http://localhost:8888/"
 #endif
 #endif
 
