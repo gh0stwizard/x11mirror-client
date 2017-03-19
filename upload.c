@@ -133,17 +133,16 @@ upload_file (FILE *fh)
 
     res = curl_easy_perform (curl);
 
-    if (res != CURLE_OK) {
+    if (res != CURLE_OK)
         fprintf (stderr, "curl: %s\n", curl_easy_strerror (res));
-        return 1;
-    }
 #if defined(_DEBUG)
     else
         fprintf (stderr, "%s", storage.memory);
 #endif
 
+    free (storage.memory);
     curl_formfree(form1);
     curl_slist_free_all (header);
 
-    return 0;
+    return (res == CURLE_OK) ? 0 : 1;
 }
