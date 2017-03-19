@@ -137,7 +137,7 @@ upload_file (FILE *fh)
         fprintf (stderr, "curl: %s\n", curl_easy_strerror (res));
 #if defined(_DEBUG)
     else
-        fprintf (stderr, "%s", storage.memory);
+        fprintf (stderr, storage.memory);
 #endif
 
     free (storage.memory);
