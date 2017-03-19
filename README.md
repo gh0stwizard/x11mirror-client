@@ -1,4 +1,4 @@
-# x11mirror-client: an X11 client to retrieve an image of a window
+# x11mirror-client
 
 
 ## Description
