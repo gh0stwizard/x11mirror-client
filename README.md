@@ -26,8 +26,7 @@ or a whole display.
 ## Usage
 
 ```
-> ./x11mirror-client -?
-./x11mirror-client: invalid option -- '?'
+shell> ./x11mirror-client -?
 Usage: ./x11mirror-client [-w window] [OPTIONS]
 Options:
   -d display        connection string to X11
