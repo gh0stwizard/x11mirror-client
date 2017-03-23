@@ -156,6 +156,20 @@ form-data;name="file";filename="x11mirror.xwd.gz"
 You may look on the `upload.c` file for details.
 
 
+### Delay option
+
+The delay option `-D` was introduced to save CPU resources of the computer.
+The value should be specified as milliseconds. For instance, to get
+screenshots each 2 seconds you have to run *x11mirror-client* in such way:
+
+```
+shell> ./x11mirror-client -D 2000
+```
+
+If you would like to send screenshots without a delay you may re-build
+the program with `-D_NO_DELAY` flag in CFLAGS. See `Makefile` for details.
+
+
 ## Why?
 
 Just for fun.
