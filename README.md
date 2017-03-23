@@ -8,7 +8,10 @@ of the specified window or a whole display, saves it to a file
 and sends it to a remote server.
 
 A video is worth a thousand words:
-[Video demonstration on YouTube](https://youtu.be/4Kz16FlFcjQ) ~7min.
+[video demonstration on YouTube](https://youtu.be/4Kz16FlFcjQ) ~7min.
+
+The [x11mirror-server][1] is a HTTP server which demonstrated
+in the video above. It is a complementary part for `x11mirror-client`.
 
 
 ## Features
