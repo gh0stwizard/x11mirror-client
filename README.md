@@ -113,10 +113,37 @@ shell> convert -list format | grep XWD
 ```
 
 
+#### Window ID
+
+Each X11's window has its own identifier (window id). The `xwininfo` 
+utility may be useful for you.
+
+To list all current windows type the next command:
+
+```
+shell> xwininfo -tree -root
+```
+
+You may also get the window id for a specific window. Just run
+`xwininfo` without arguments and point to the window.
+
+```
+shell> xwininfo
+```
+
+To pass the window id for *x11mirror-client* you have to use the `-w`
+option:
+
+```
+shell> ./x11mirror-client -w 0x1400006
+```
+
+
 ### Case 1: save the current screenshot to a XWD file
 
 In this case the program stores the screenshot of the window or the
 whole display to one file. By default the outfile have the XWD format.
+Use the `-o` option to specify a different location of the output file:
 
 ```
 shell> ./x11mirror-client -o /tmp/x11mirror.xwd
@@ -126,13 +153,13 @@ shell> ./x11mirror-client -o /tmp/x11mirror.xwd
 ### Case 2: save the current screenshot to a gzip file
 
 Same as above but with a compression of the outfile to gzip format.
-The example below have an additional `-z` flag.
+The example below have an additional the `-z` option.
 
 ```
 shell> ./x11mirror-client -o /tmp/x11mirror.xwd -z
 ```
 
-You may also specify a compression level via `-Z` flag. For instance,
+You may also specify a compression level via `-Z` option. For instance,
 use the fastest compression:
 
 ```
@@ -144,8 +171,8 @@ shell> ./x11mirror-client -o /tmp/x11mirror.xwd -z -Z 1
 
 You may combine the options above to get an acceptable result.
 The *x11mirror-client* do a simple POST request to the remote server
-using `multipart/form-data` format. To do so you have specify
-flag `-u` to the program:
+using `multipart/form-data` format. To do so you have to specify
+the `-u` option:
 
 ```
 shell> ./x11mirror-client -o /tmp/x11mirror.xwd -u http://example.com/
