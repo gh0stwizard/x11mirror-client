@@ -18,7 +18,7 @@ or a whole display.
 
 ## Limitations
 
-* The program must be runned on the same machine where is X11 server is
+* The program must be run on the same machine where X11 xorg-server is
   running.
 * X11 server must support next extentions: composite, RENDER, FIXES, DAMAGE.
   On modern GNU/Linux distributives they are all supported and available.
@@ -61,10 +61,10 @@ Default values are:
 * Output file by default: `/tmp/x11mirror.xwd`
 
 In any case the program will store a screenshot to a file. The original
-idea was to keep the screenshot into the memory of the program. 
+idea was to keep the screenshot into the program's memory.
 May be I will implement it later.
 
-Because of fact that file will be frequently updated I advise you to
+Because of fact that the file will be frequently updated I advise you to
 use `tmpfs`.
 
 
@@ -377,8 +377,8 @@ purposes.
 how RENDER extention was created.
 
 6. [All articles by Keith Packard][12] - you have to read some of them too.
-A lot of details was told on Usenix Conferences and probably you will not
-find a place in Internet which explains X11 extentions in a simple way.
+A lot of details were told on Usenix Conferences and probably you will not
+find a place in Internet which explains X11 extentions in a such simple way.
 
 7. [DAMAGE][9] - a document describes its API.
 
