@@ -71,7 +71,7 @@ use `tmpfs`.
 #### Why ZLIB?
 
 The XWD format consumes a lot of disk space. To understand this better
-look a these numbers:
+look at these numbers:
 
 ```
 -rw------- 1 xxx xxx 4.1M Mar 23 22:55 xmc.xwd
@@ -174,6 +174,10 @@ the program with `-D_NO_DELAY` flag in CFLAGS. See `Makefile` for details.
 
 Just for fun.
 
+To be more precise, when I had read the X11 documentation I have wanted to 
+implement something unusual. Also such exercises helps remember what you 
+had read about.
+
 
 ## How does it work?
 
@@ -203,7 +207,7 @@ with other windows (if they present) and then you see "a picture"
 of the window.
 
 In the case of intersections with other windows, the `xorg-server`
-will not try to draw things that are covered by other window.
+will not try to draw things that are covered by other windows.
 You may imagine that `xorg-server` is operates under some
 sort of a patchwork, where each part is either belongs to
 the target window or does not.
@@ -229,17 +233,18 @@ The *x11mirror-client* uses next X11 extentions:
 #### COMPOSITE
 
 The role of COMPOSITE extention is to compose the output
-images of the windows. It is also provides support to images
+images of the windows. It is also provides support of images
 with alpha channel.
 
 So, basically, if you want to draw images (content) of windows 
-in an order you would like to see then you have to use this 
-extention. For instance, if you wish to add true transparency 
-to windows you have to use this extention too. There is no 
-other way to get true transparency under X11 at the moment.
+on the display in some kind of predefined order you would like to see, 
+then you have to use this extention. For instance, if you wish 
+to add true transparency to windows you have to use this extention 
+too. There is no other way to get true transparency under 
+X11 at the moment.
 
 In `x11mirror-client` the COMPOSITE plays a role which
-get the main job: it allows to get a content of whole window
+does the major job: it allows to get a content of whole window
 even if it is covered by other ones.
 
 
@@ -252,13 +257,11 @@ and the output image are the same. I will not provide
 details about that here, you may look at them in **References**
 section below.
 
-So, the first thing is that RENDER extention will care for 
-us about Visual Format of the window and the output image.
+So, the first thing is that RENDER extention will take care for
+us about Visual Format of the window and the output image too.
 
-Secondly, this extention will provide an interface to 
-the modern Picture format. The `x11mirror-client` uses this
-format as the output buffer where stores the actual image
-of the window.
+Secondly, this extention provides an interface to for modern 
+Picture format. The `x11mirror-client` uses it as an output buffer.
 
 
 #### DAMAGE
