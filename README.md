@@ -3,10 +3,12 @@
 
 ## Description
 
-This is an X11 program which retrieve an image of specified window
-or a whole display.
+This is an X11 program which retrieves an image (a screenshot)
+of the specified window or a whole display, saves it to a file
+and sends it to a remote server.
 
-[Video demonstration on YouTube](https://youtu.be/4Kz16FlFcjQ)
+A video is worth a thousand words:
+[Video demonstration on YouTube](https://youtu.be/4Kz16FlFcjQ) ~7min.
 
 
 ## Features
@@ -201,7 +203,7 @@ that the most important part of X11 which is related to this project
 is next: the X11 uses only one buffer to display content of windows.
 
 That's right, there is no individual buffers for each window. When
-the content of the window is draw by `xorg-server`, the last one
+the content of the window has draw by `xorg-server`, the last one
 calculates the size of the window, its position, its intersections
 with other windows (if they present) and then you see "a picture"
 of the window.
