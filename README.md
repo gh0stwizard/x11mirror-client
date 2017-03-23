@@ -58,20 +58,60 @@ a specified file.
 Default values are:
 
 * URL by default: http://localhost:8888/
-* File by default: /tmp/x11mirror.xwd
+* Output file by default: `/tmp/x11mirror.xwd`
 
-In any case the program will store screenshot to a file. The original
-idea was to keep a screenshot into memory. May be I will implement
-it later.
+In any case the program will store a screenshot to a file. The original
+idea was to keep the screenshot into the memory of the program. 
+May be I will implement it later.
 
-Because of fact that file will be frequently updated I advise that
-you use `tmpfs`.
+Because of fact that file will be frequently updated I advise you to
+use `tmpfs`.
+
+
+#### Why ZLIB?
+
+The XWD format consumes a lot of disk space. To understand this better
+look a these numbers:
+
+```
+-rw------- 1 xxx xxx 4.1M Mar 23 22:55 xmc.xwd
+-rw------- 1 xxx xxx  74K Mar 23 22:41 xmc.xwd.gz
+```
+
+The files contain the same screenshot of the whole display with the
+resolution 1366x768 pixels.
+
+
+#### How do I convert XWD to PNG, JPEG?
+
+Well, it is quite common question in Internet. You have to use `convert`
+utility from ImageMagick package. For instance, to convert XWD to JPG
+just type in console the next command:
+
+```
+shell> convert xwd:input_file.xwd jpg:output_file.jpg
+```
+
+The `convert` utility understands gzipped XWD files too, so you don't
+need to `gunzip` them:
+
+```
+shell> convert xwd:input_file.xwd.gz jpg:output_file.jpg
+```
+
+One note to be mention: the ImageMagick on your system must be built
+with X11 support. You may check if its ok by next command:
+
+```
+shell> convert -list format | grep XWD
+      XWD* XWD       rw-   X Windows system window dump (color)
+```
 
 
 ### Case 1: save the current screenshot to a XWD file
 
-In this mod the program stores the screenshot of a window or whole display
-to one file. By default the outfile have the XWD format.
+In this case the program stores the screenshot of the window or the
+whole display to one file. By default the outfile have the XWD format.
 
 ```
 shell> ./x11mirror-client -o /tmp/x11mirror.xwd
@@ -109,8 +149,12 @@ shell> ./x11mirror-client -o /tmp/x11mirror.xwd -u http://example.com/
 The format of the request which will be sent to the server is simple:
 
 ```
-
+form-data;name="file";filename="x11mirror.xwd.gz"
+[data bytes]
 ```
+
+You may look on the `upload.c` file for details.
+
 
 ## Why?
 
@@ -147,7 +191,7 @@ of the window.
 In the case of intersections with other windows, the `xorg-server`
 will not try to draw things that are covered by other window.
 You may imagine that `xorg-server` is operates under some
-sort of patchwork, where each part is either belongs to
+sort of a patchwork, where each part is either belongs to
 the target window or does not.
 
 That's why it is not possible to just get a screenshot
@@ -304,28 +348,34 @@ provides a little details about how they work. So, I will try
 to give you full information which may be interested in X11 development:
 
 
-1. [The X New Developer’s Guide][7] - main document about X11
+1. [The X New Developer’s Guide][7] - I would say that it provides an introduction to X11 world.
 
-2. [fredrik's X11 Composite Tutorial][8] - a good tutorial for practice
+2. [Xlib - C Language X Interface][16] - xlib documentation, the main
+document of X11 developer.
+
+3. [XCB API][17] - if you'll plan to create X11 applications from a scratch, the xcb
+provides a modern interface to X11 than xlib. You have to look on it.
+
+4. [fredrik's X11 Composite Tutorial][8] - a good tutorial for practice
 purposes.
 
-3. [A New Rendering Model for X][11] by Keith Packard - a good article which explains why and
-how RENDER extention was created
+5. [A New Rendering Model for X][11] by Keith Packard - a good article which explains why and
+how RENDER extention was created.
 
-4. [All articles by Keith Packard][12] - you have to read some of them too.
+6. [All articles by Keith Packard][12] - you have to read some of them too.
 A lot of details was told on Usenix Conferences and probably you will not
 find a place in Internet which explains X11 extentions in a simple way.
 
-5. [DAMAGE][9] - a document describes its API.
+7. [DAMAGE][9] - a document describes its API.
 
-6. [RENDER][10] - a document describes its API.
+8. [RENDER][10] - a document describes its API.
 
-7. `man xcomposite` - yep, manpage that describes its API.
+9. `man xcomposite` - yep, manpage that describes its API.
 
-8. [Everything curl][13] (pdf) - a wonderful book about CURL, also available
+10. [Everything curl][13] (pdf) - a wonderful book about CURL, also available
 [online][14].
 
-9. [zlib Manual][15] - explains itself.
+11. [zlib Manual][15] - explains itself.
 
 
 [1]: https://github.com/gh0stwizard/x11mirror-server
@@ -343,3 +393,5 @@ find a place in Internet which explains X11 extentions in a simple way.
 [13]: https://www.gitbook.com/download/pdf/book/bagder/everything-curl
 [14]: https://ec.haxx.se/
 [15]: http://www.zlib.net/manual.html
+[16]: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html
+[17]: https://xcb.freedesktop.org/XcbApi/
