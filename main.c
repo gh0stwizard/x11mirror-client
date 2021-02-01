@@ -7,9 +7,9 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#ifndef _NO_DELAY
-#include <time.h>
-#include <math.h>
+#ifdef USE_DELAY
+    #include <time.h>
+    #include <math.h>
 #endif
 #include <unistd.h>
 #include <X11/Xlib.h>
@@ -19,14 +19,13 @@
 #include <X11/extensions/Xrender.h>
 #include <X11/extensions/Xdamage.h>
 #include <X11/extensions/shape.h>
-
 #include "common.h"
 #include "window_dump.h"
-#ifndef _NO_ZLIB
-#include "compression.h"
+#ifdef HAVE_ZLIB
+    #include "compression.h"
 #endif
-#ifndef _NO_CURL
-#include "upload.h"
+#ifdef HAVE_CURL
+    #include "upload.h"
 #endif
 
 /* is there compositor manager */
@@ -52,7 +51,10 @@ static int damage_event, damage_error;
 static char *out_file_name;
 static FILE *out_file;
 
-#ifndef _NO_DELAY
+#define _STR(x) #x
+#define STR(x) _STR(x)
+
+#ifdef USE_DELAY
 #ifndef _DELAY_NSEC
 /* very low numbers may lead to lags */
 #define _DELAY_NSEC 0 * 1000000
@@ -63,44 +65,74 @@ static FILE *out_file;
 #endif
 
 #ifndef _OUTPUT_FILE
-#define _OUTPUT_FILE "/tmp/x11mirror.xwd"
+#define _OUTPUT_FILE /tmp/x11mirror.xwd
 #endif
 
-#ifndef _NO_ZLIB
+#ifdef HAVE_ZLIB
+#ifndef _ZLIB_DEFAULT_LEVEL
+#define _ZLIB_DEFAULT_LEVEL 7
+#endif
 static Bool use_zlib = False;
-static unsigned zlevel = 7;
+static unsigned zlevel = _ZLIB_DEFAULT_LEVEL;
 #endif
 
-#ifndef _NO_CURL
-#ifndef DEFAULT_URL
-#define DEFAULT_URL "http://localhost:8888/"
+#ifdef HAVE_CURL
+#ifndef _UPLOAD_URL
+#define _UPLOAD_URL http://localhost:8888/
 #endif
+static Bool enable_upload = False;
 #endif
 
 
 static void
 print_usage (const char *prog)
 {
-	fprintf (stderr, "Usage: %s [-w window] [OPTIONS]\n", prog);
-	fprintf (stderr, "Options:\n");
+    fprintf (stderr, "Usage: %s [-w window] [OPTIONS]\n", prog);
+    fprintf (stderr, "Options:\n");
 #define desc(o,d) fprintf (stderr, "  %-16s  %s\n", o, d);
-	desc ("-d display", "connection string to X11");
-	desc ("-o output", "output filename, default: " _OUTPUT_FILE);
-#ifndef _NO_CURL
+    desc ("--help, -h", "print this help");
+    desc ("--version, -v", "print the program version");
+    desc ("-d display", "connection string to X11");
+    desc ("-o output", "output filename, default: " STR(_OUTPUT_FILE));
+    desc ("-w window", "target window id, default: root");
+    desc ("-S", "enable X11 synchronization, default: disabled");
+#ifdef HAVE_CURL
     desc ("-u URL", "an URL to send data");
+    desc ("-U", "enable uploading, default: disabled");
 #endif
-	desc ("-w window", "target window id, default is root");
-#ifndef _NO_ZLIB
-	desc ("-z", "enable gzip (zlib) compression, by default disabled");
+#ifdef HAVE_ZLIB
+    desc ("-z", "enable gzip (zlib) compression, default: disabled");
+    desc ("-Z", "zlib compression level (1-9), default: " STR(_ZLIB_DEFAULT_LEVEL));
 #endif
-#ifndef _NO_DELAY
-	desc ("-D", "delay after taking a screenshot in milliseconds");
-#endif
-	desc ("-S", "enable X11 synchronization, by default disabled");
-#ifndef _NO_ZLIB
-	desc ("-Z", "zlib compression level (1-9), default 7");
+#ifdef USE_DELAY
+    desc ("-D", "delay between making screenshots in milliseconds");
 #endif
 #undef desc
+}
+
+
+static void
+print_version ()
+{
+    const char futures[] = {
+#ifdef HAVE_CURL
+        " +curl"
+#endif
+#ifdef HAVE_ZLIB
+        " +zlib"
+#endif
+#ifdef _DEBUG
+        " +debug"
+#endif
+#ifdef PRINT_ERRORS
+        " +errors"
+#endif
+#ifndef USE_DELAY
+        " -delay"
+#endif
+    };
+
+    printf ("v%s%s\n", STR(APP_VERSION), futures);
 }
 
 
@@ -121,21 +153,47 @@ main (int argc, char *argv[])
     Damage      w_damage, pixmap_damage;
     Bool        synchronize = False;
     unsigned    my_events;
-#ifndef _NO_DELAY
+#ifdef USE_DELAY
     time_t      delay_sec = _DELAY_SEC;
     long        delay_nsec = _DELAY_NSEC;
 #endif
-#ifndef _NO_CURL
+#ifdef HAVE_CURL
     char        *url = NULL;
 #endif
 
+    static struct option opts[] = {
+        { "help",       no_argument,        0, 'h' },
+        { "version",    no_argument,        0, 'v' },
+        { "display",    required_argument,  0, 'd' },
+        { "output",     required_argument,  0, 'o' },
+        { "window",     required_argument,  0, 'w' },
+        { "sync-x11",   no_argument,        0, 'S' },
+#ifdef HAVE_CURL
+        { "url",        required_argument,  0, 'u' },
+        { "upload",     no_argument,        0, 'U' },
+#endif
+#ifdef HAVE_ZLIB
+        { "compress",   no_argument,        0, 'z' },
+        { "z-level",    required_argument,  0, 'Z' },
+#endif
+#ifdef USE_DELAY
+        { "delay",      required_argument,  0, 'D' },
+#endif
+        { 0, 0, 0, 0 }
+    };
 
-    while ( (opt = getopt (argc, argv, "d:o:u:w:zD:SZ:")) != -1 ) {
+    while (1) {
+        int index = 0;
+        opt = getopt_long (argc, argv, "hvd:o:w:Su:UzZ:D:", opts, &index);
+        if (opt == -1) break;
         switch (opt) {
         case 'd':
             display = optarg;
             break;
-#ifndef _NO_ZLIB
+#ifdef HAVE_ZLIB
+        case 'z':
+            use_zlib = True;
+            break;
         case 'Z':
             sscanf (optarg, "%u", &zlevel);
             if (zlevel <= 0 || zlevel >= 10)
@@ -145,10 +203,13 @@ main (int argc, char *argv[])
         case 'o':
             out_file_name = optarg;
             break;
-#ifndef _NO_CURL
+#ifdef HAVE_CURL
         case 'u':
             url = optarg;
-    		break;
+            break;
+        case 'U':
+            enable_upload = True;
+            break;
 #endif
         case 'w':
             sscanf (optarg, "0x%lx", &w);
@@ -157,12 +218,7 @@ main (int argc, char *argv[])
             if (w == 0)
                 die ("Invalid window id: %s.", optarg);
             break;
-#ifndef _NO_ZLIB
-        case 'z':
-            use_zlib = True;
-            break;
-#endif
-#ifndef _NO_DELAY
+#ifdef USE_DELAY
         case 'D': {
             long delay = 0;
             sscanf (optarg, "%li", &delay);
@@ -181,6 +237,12 @@ main (int argc, char *argv[])
         case 'S':
             synchronize = True;
             break;
+        case 'h':
+            print_usage (argv[0]);
+            exit (EXIT_SUCCESS);
+        case 'v':
+            print_version ();
+            exit (EXIT_SUCCESS);
         default: /* '?' */
             print_usage (argv[0]);
             exit (EXIT_FAILURE);
@@ -188,7 +250,7 @@ main (int argc, char *argv[])
     }
 
     if (out_file_name == NULL) {
-        out_file_name = _OUTPUT_FILE;
+        out_file_name = STR(_OUTPUT_FILE);
     }
     else {
         int len = strlen (out_file_name);
@@ -198,17 +260,18 @@ main (int argc, char *argv[])
     }
 
     debug ("output file: %s\n", out_file_name);
-#ifndef _NO_ZLIB
+#ifdef HAVE_ZLIB
     debug ("output file format: %s\n", (use_zlib) ? "zlib" : "xwd");
 #endif
 
 
-#ifndef _NO_CURL
+#ifdef HAVE_CURL
     /* initialize curl first */
     if (url == NULL)
-        url = DEFAULT_URL;
+        url = STR(_UPLOAD_URL);
 
-    init_uploader (url);
+    if (enable_upload)
+        init_uploader (url);
     /* open file in read-write mode */
     out_file = fopen (out_file_name, "w+b");
 #else
@@ -221,7 +284,7 @@ main (int argc, char *argv[])
         exit (EXIT_FAILURE);
     }
 
-#ifndef _NO_DELAY
+#ifdef USE_DELAY
     debug ("delay between screenshots: %lu.%lu second(s)\n",
             delay_sec, lround (delay_nsec / 1000000));
 #endif
@@ -327,13 +390,13 @@ main (int argc, char *argv[])
                     XRenderFreePicture (dpy, w_picture);
                     XDamageDestroy (dpy, pixmap_damage);
                     w_picture = XRenderCreatePicture
-			(dpy, w, format, CPSubwindowMode, &w_pa);
+                        (dpy, w, format, CPSubwindowMode, &w_pa);
                     w_pixmap = XCreatePixmap
-			(dpy, w, wa.width, wa.height, wa.depth);
+                        (dpy, w, wa.width, wa.height, wa.depth);
                     pixmap_picture = XRenderCreatePicture
-			(dpy, w_pixmap, format, 0, NULL);
+                        (dpy, w_pixmap, format, 0, NULL);
                     pixmap_damage = XDamageCreate
-			(dpy, w_pixmap, XDamageReportRawRectangles);
+                        (dpy, w_pixmap, XDamageReportRawRectangles);
                 }
             }   break;
             case DestroyNotify:
@@ -354,11 +417,12 @@ main (int argc, char *argv[])
         }
         else if (my_events & (1 << 1)) {
             save_file (dpy, w_screen, w, w_pixmap);
-#ifndef _NO_CURL
-            upload_file (out_file);
+#ifdef HAVE_CURL
+            if (enable_upload)
+                upload_file (out_file);
 #endif
 
-#ifndef _NO_DELAY
+#ifdef USE_DELAY
             struct timespec wtime = {
                 .tv_sec = delay_sec,
                 .tv_nsec = delay_nsec
@@ -382,10 +446,11 @@ done:
     XRenderFreePicture (dpy, w_picture);
     XSync (dpy, False);
     XCloseDisplay (dpy);
-#ifndef _NO_CURL
+#ifdef HAVE_CURL
     free_uploader ();
 #endif
     fclose (out_file);
+
     return 0;
 }
 
@@ -490,7 +555,7 @@ save_file (Display *d, int screen, Window w, Pixmap p)
 
     if ((dump = Pixmap_Dump (d, screen, w, p)) != NULL) {
         rewind (out_file);
-#ifndef _NO_ZLIB
+#ifdef HAVE_ZLIB
         if (use_zlib)
             save_gzip_file (dump, out_file, zlevel);
         else
@@ -516,35 +581,35 @@ xerror_handler (Display *dpy, XErrorEvent *ev)
 
     o = ev->error_code - xfixes_error;
     switch (o) {
-    case BadRegion: name = "BadRegion";	break;
+    case BadRegion: name = "BadRegion"; break;
     default: break;
     }
 
     o = ev->error_code - damage_error;
     switch (o) {
-    case BadDamage: name = "BadDamage";	break;
+    case BadDamage: name = "BadDamage"; break;
     default: break;
     }
 
     o = ev->error_code - render_error;
     switch (o) {
-    case BadPictFormat: name ="BadPictFormat"; break;
-    case BadPicture: name ="BadPicture"; break;
-    case BadPictOp: name ="BadPictOp"; break;
-    case BadGlyphSet: name ="BadGlyphSet"; break;
-    case BadGlyph: name ="BadGlyph"; break;
+    case BadPictFormat: name ="BadPictFormat";  break;
+    case BadPicture:    name ="BadPicture";     break;
+    case BadPictOp:     name ="BadPictOp";      break;
+    case BadGlyphSet:   name ="BadGlyphSet";    break;
+    case BadGlyph:      name ="BadGlyph";       break;
     default: break;
     }
 
     if (name == NULL) {
-	    buffer[0] = '\0';
-	    XGetErrorText (dpy, ev->error_code, buffer, sizeof (buffer));
-	    name = buffer;
+        buffer[0] = '\0';
+        XGetErrorText (dpy, ev->error_code, buffer, sizeof (buffer));
+        name = buffer;
     }
 
     fprintf (stderr, "error %d: %s request %d minor %d serial %lu\n",
-	     ev->error_code, (strlen (name) > 0) ? name : "unknown",
-	     ev->request_code, ev->minor_code, ev->serial);
+        ev->error_code, (strlen (name) > 0) ? name : "unknown",
+        ev->request_code, ev->minor_code, ev->serial);
 #endif
 
     return 0;

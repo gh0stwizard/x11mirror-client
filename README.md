@@ -1,11 +1,10 @@
 # x11mirror-client
 
-
 ## Description
 
 This is an X11 program which retrieves an image (a screenshot)
 of the specified window or a whole display, saves it to a file
-and sends it to a remote server.
+and, possibly, sends it to a remote server.
 
 A video is worth a thousand words:
 [video demonstration on YouTube](https://youtu.be/4Kz16FlFcjQ) ~7min.
@@ -21,7 +20,60 @@ in the video above. It is a complementary part for `x11mirror-client`.
 * Supports curl to upload files.
 
 
-## Limitations
+## Dependecies
+
+* X11 development headers (X11, Xcomposite, Xrender, Xdamage)
+* zlib (optional)
+* curl (optional)
+* GNU make (to build)
+* C99 compiler (gcc, clang, etc)
+
+
+## Build
+
+Currently tested only on GNU/Linux. By default the program is building 
+with CURL & ZLIB support. Use `make help` to see general options:
+
+```
+% make help
+WITH_CURL=YES|NO - enable/disable curl support, default: YES
+WITH_ZLIB=YES|NO - enable/disable zlib support, default: YES
+ENABLE_DELAY=YES|NO - use delay between screenshots, default: YES
+ENABLE_DEBUG=YES|NO - be verbose and print debug information, default: NO
+ENABLE_ERRORS=YES|NO - print errors to STDERR, default: YES
+```
+
+Additional options that should be passed via `CFLAGS`:
+
+* `_DELAY_SEC`, `_DELAY_NSEC` - default is `1` and `0` respectively.
+* `_UPLOAD_URL` - default is `http://localhost:8888/`.
+* `_OUTPUT_FILE` - default is `/tmp/x11mirror.xwd`.
+* `_ZLIB_DEFAULT_LEVEL` - default is 7.
+
+Note that the default value is `CFLAGS=-O2`. Please, see [main.c](/main.c)
+and [Makefile](/Makefile) for details.
+
+
+### Build dependencies
+
+To build the application you have to install development packages on your
+system. The list below shows packages to install on Void Linux:
+
+* libX11-devel
+* libXcomposite-devel
+* libXrender-devel
+* libXdamage-devel
+
+Note that on your system the package names could differ from the list above.
+
+Optionally you may install zlib and curl libriries too:
+* zlib-devel
+* libcurl-devel
+
+
+## Usage
+
+### Limitations
 
 * The program must be run on the same machine where X11 xorg-server is
   running.
@@ -29,41 +81,55 @@ in the video above. It is a complementary part for `x11mirror-client`.
   On modern GNU/Linux distributives they are all supported and available.
 
 
-## Usage
+### General usage
+
+Please see options below to understand basics:
 
 ```
-shell> ./x11mirror-client -?
+% ./x11mirror-client --help
 Usage: ./x11mirror-client [-w window] [OPTIONS]
 Options:
+  --help, -h        print this help
   -d display        connection string to X11
   -o output         output filename, default: /tmp/x11mirror.xwd
+  -w window         target window id, default: root
+  -S                enable X11 synchronization, default: disabled
   -u URL            an URL to send data
-  -w window         target window id, default is root
-  -z                enable gzip (zlib) compression, by default disabled
-  -D                delay after taking a screenshot in milliseconds
-  -S                enable X11 synchronization, by default disabled
-  -Z                zlib compression level (1-9), default 7
+  -U                enable uploading, default: disabled
+  -z                enable gzip (zlib) compression, default: disabled
+  -Z                zlib compression level (1-9), default: 7
+  -D                delay between making screenshots in milliseconds
 ```
 
+Quickstart command:
 
-### General information
+```
+% ./x11mirror-client
+```
 
-The *x11mirror-client* can be built in two different ways:
+By default the latest screenshot file could been found in `/tmp/x11mirror.xwd`
+(not compressed) and it will be updated every 1 second.
+
+You can stop the program at any time by pressing `CTRL+C` on keyboard.
+
+
+### Supported modes
+
+The *x11mirror-client* can be built in different ways:
 
 * Without CURL support
 * Without ZLIB support
 
-If the program is built with CURL support it will send
-screenshots to a remote HTTP server (see case 3 below) in
-automatic mode.
+If the program was built with CURL support it can send
+screenshots to a remote HTTP server in automatic mode.
 
-Without CURL support the program just saves the current screenshot to
-a specified file.
+Without CURL support the program just saves a screenshot to
+the specified file.
 
 Default values are:
 
-* URL by default: http://localhost:8888/
-* Output file by default: `/tmp/x11mirror.xwd`
+* Remote server URL: `http://localhost:8888/`
+* Output file: `/tmp/x11mirror.xwd`
 
 In any case the program will store a screenshot to a file. The original
 idea was to keep the screenshot into the program's memory.
@@ -75,8 +141,8 @@ use `tmpfs`.
 
 #### Why ZLIB?
 
-The XWD format consumes a lot of disk space. To understand this better
-look at these numbers:
+The XWD format consumes a lot of disk space. To understand this better,
+please look at these numbers:
 
 ```
 -rw------- 1 xxx xxx 4.1M Mar 23 22:55 xmc.xwd
@@ -94,21 +160,21 @@ utility from ImageMagick package. For instance, to convert XWD to JPG
 just type in console the next command:
 
 ```
-shell> convert xwd:input_file.xwd jpg:output_file.jpg
+% convert xwd:input_file.xwd jpg:output_file.jpg
 ```
 
 The `convert` utility understands gzipped XWD files too, so you don't
 need to `gunzip` them:
 
 ```
-shell> convert xwd:input_file.xwd.gz jpg:output_file.jpg
+% convert xwd:input_file.xwd.gz jpg:output_file.jpg
 ```
 
 One note to be mention: the ImageMagick on your system must be built
-with X11 support. You may check if its ok by next command:
+with X11 support. You may check if its ok by the next command:
 
 ```
-shell> convert -list format | grep XWD
+% convert -list format | grep XWD
       XWD* XWD       rw-   X Windows system window dump (color)
 ```
 
@@ -121,22 +187,24 @@ utility may be useful for you.
 To list all current windows type the next command:
 
 ```
-shell> xwininfo -tree -root
+% xwininfo -tree -root
 ```
 
 You may also get the window id for a specific window. Just run
 `xwininfo` without arguments and point to the window.
 
 ```
-shell> xwininfo
+% xwininfo
 ```
 
 To pass the window id for *x11mirror-client* you have to use the `-w`
-option:
+option, for instance:
 
 ```
-shell> ./x11mirror-client -w 0x1400006
+% ./x11mirror-client -w 0x1400006
 ```
+
+By default `x11mirror-client` uses the root window (whole screen).
 
 
 ### Case 1: save the current screenshot to a XWD file
@@ -146,8 +214,10 @@ whole display to one file. By default the outfile have the XWD format.
 Use the `-o` option to specify a different location of the output file:
 
 ```
-shell> ./x11mirror-client -o /tmp/x11mirror.xwd
+% ./x11mirror-client -o /path/to/x11mirror.xwd
 ```
+
+The default output filepath is `/tmp/x11mirror.xwd`.
 
 
 ### Case 2: save the current screenshot to a gzip file
@@ -156,26 +226,37 @@ Same as above but with a compression of the outfile to gzip format.
 The example below have an additional the `-z` option.
 
 ```
-shell> ./x11mirror-client -o /tmp/x11mirror.xwd -z
+% ./x11mirror-client -o /path/to/x11mirror.xwd.gz -z
 ```
 
 You may also specify a compression level via `-Z` option. For instance,
 use the fastest compression:
 
 ```
-shell> ./x11mirror-client -o /tmp/x11mirror.xwd -z -Z 1
+% ./x11mirror-client -o /path/to/x11mirror.xwd.gz -z -Z 1
 ```
 
+The default compression level is `7`. Note that if you not specify the output
+filepath, then `x11mirror.xwd` will use `/tmp/x11mirror.xwd` without appended
+`.gz` extension. This would not break `convert` utility to recognize the
+correct file format.
 
-### Case 3: send the current screenshot to a remote server by HTTP
+
+### Case 3: send the current screenshot to a remote server via HTTP
 
 You may combine the options above to get an acceptable result.
 The *x11mirror-client* do a simple POST request to the remote server
 using `multipart/form-data` format. To do so you have to specify
-the `-u` option:
+the `-U` option:
 
 ```
-shell> ./x11mirror-client -o /tmp/x11mirror.xwd -u http://example.com/
+% ./x11mirror-client -U
+```
+
+To change the remote server URL you may use `-u` option, as show below:
+
+```
+% ./x11mirror-client -U -u http://example.net/
 ```
 
 The format of the request which will be sent to the server is simple:
@@ -185,7 +266,7 @@ form-data;name="file";filename="x11mirror.xwd.gz"
 [data bytes]
 ```
 
-You may look on the `upload.c` file for details.
+You may look at the [upload.c](/upload.c) file for details.
 
 
 ### Delay option
@@ -195,11 +276,14 @@ The value should be specified as milliseconds. For instance, to get
 screenshots each 2 seconds you have to run *x11mirror-client* in such way:
 
 ```
-shell> ./x11mirror-client -D 2000
+% ./x11mirror-client -D 2000
 ```
 
+The default delay value is the 1 second (e.g. `-D 1000`).
+
 If you would like to send screenshots without a delay you may re-build
-the program with `-D_NO_DELAY` flag in CFLAGS. See `Makefile` for details.
+the program with passing `ENABLE_DELAY=NO` to `make`.
+See also [Makefile](/Makefile) for details.
 
 
 ## Why?
@@ -343,37 +427,6 @@ to us, as I mentioned before.
 That's all.
 
 
-## Dependecies
-
-* X11 development headers
-* zlib (optional)
-* curl (optional)
-* GNU make (to build)
-
-
-## Build
-
-Currently tested only on GNU/Linux. By default the program is building 
-with CURL & ZLIB support.
-
-```
-shell> make
-```
-
-
-### Build without CURL
-
-You have to modify the `Makefile` and specify the `-D_NO_CURL` in
-CFLAGS, change the value of `IGN_SRC` to exclude `upload.c` and
-change LDFLAGS to exclude CURL libs.
-
-
-### Build without ZLIB
-
-The workflow to do so is the same as described above for the CURL.
-In that case you have to exclude `compression.c` file, see
-variable `IGN_SRC` in `Makefile`. You have to specify `-D_NO_ZLIB`
-in CFLAGS. And you have to change LDFLAGS too.
 
 
 ## See also

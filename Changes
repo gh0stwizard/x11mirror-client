@@ -1,0 +1,7 @@
+0.2.0   Feb  1, 2021
+    - Improved build process
+    - Added the option to control uploading process (-U)
+    - Updated readme
+
+0.1     Mar 24, 2017
+    - Initial release

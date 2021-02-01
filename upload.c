@@ -6,7 +6,7 @@
 #include <curl/curl.h>
 
 
-static CURL *curl;
+static CURL *curl = NULL;
 
 
 struct MemoryStruct {
@@ -39,32 +39,9 @@ init_uploader (const char *url)
 extern void
 free_uploader (void)
 {
-    curl_easy_cleanup (curl);
+    if (curl)
+        curl_easy_cleanup (curl);
 }
-
-
-#if 0
-static size_t
-read_cb (char *buffer, size_t size, size_t nmemb, void *stream)
-{
-    curl_off_t nread;
-    size_t retcode;
-
-
-    errno = 0;
-    retcode = fread (buffer, size, nmemb, (FILE *)stream);
-    nread = (curl_off_t)retcode;
-
-    fprintf (stderr,
-            "*** We read %" CURL_FORMAT_CURL_OFF_T " bytes from file\n",
-            nread);
-
-    if (errno)
-        fprintf (stderr, "!!! fread: %s\n", strerror (errno));
-
-    return retcode;
-}
-#endif
 
 
 static size_t
@@ -134,10 +111,10 @@ upload_file (FILE *fh)
     res = curl_easy_perform (curl);
 
     if (res != CURLE_OK)
-        fprintf (stderr, "curl: %s\n", curl_easy_strerror (res));
+        fprintf (stderr, "curl error: %s\n", curl_easy_strerror (res));
 #if defined(_DEBUG)
     else
-        fprintf (stderr, storage.memory);
+        fprintf (stderr, "curl response: %s\n", storage.memory);
 #endif
 
     free (storage.memory);
