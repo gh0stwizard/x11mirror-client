@@ -78,7 +78,7 @@ static unsigned zlevel = _ZLIB_DEFAULT_LEVEL;
 
 #ifdef HAVE_CURL
 #ifndef _UPLOAD_URL
-#define _UPLOAD_URL http://localhost:8888/
+#define _UPLOAD_URL "http://localhost:8888"
 #endif
 static Bool enable_upload = False;
 #endif
@@ -268,10 +268,12 @@ main (int argc, char *argv[])
 #ifdef HAVE_CURL
     /* initialize curl first */
     if (url == NULL)
-        url = STR(_UPLOAD_URL);
+        url = _UPLOAD_URL;
 
-    if (enable_upload)
+    if (enable_upload) {
+        debug ("uploading to %s\n", url);
         init_uploader (url);
+    }
     /* open file in read-write mode */
     out_file = fopen (out_file_name, "w+b");
 #else

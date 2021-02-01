@@ -46,12 +46,18 @@ ENABLE_ERRORS=YES|NO - print errors to STDERR, default: YES
 Additional options that should be passed via `CFLAGS`:
 
 * `_DELAY_SEC`, `_DELAY_NSEC` - default is `1` and `0` respectively.
-* `_UPLOAD_URL` - default is `http://localhost:8888/`.
+* `_UPLOAD_URL` - default is `"http://localhost:8888/"`.
 * `_OUTPUT_FILE` - default is `/tmp/x11mirror.xwd`.
 * `_ZLIB_DEFAULT_LEVEL` - default is 7.
 
 Note that the default value is `CFLAGS=-O2`. Please, see [main.c](/main.c)
 and [Makefile](/Makefile) for details.
+
+An example how to change the uploading URL:
+
+```
+% make CFLAGS="-Os -D_UPLOAD_URL=\\\"http://127.0.0.1:8888\\\""
+```
 
 
 ### Build dependencies
