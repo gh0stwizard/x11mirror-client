@@ -354,6 +354,7 @@ main (int argc, char *argv[])
     0, 0, 0, 0, \
     0, 0, wa.width, wa.height)
 
+    debug ("waiting for events ...\n");
 
     while (1) {
         my_events = 0;
@@ -405,7 +406,7 @@ main (int argc, char *argv[])
                 if (ev.xunmap.window == w)
                     goto done;
                 break;
-            }
+            } // switch (ev.type) {
         } while (QLength (dpy));
 
 
