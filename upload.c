@@ -85,18 +85,18 @@ upload_file (FILE * fh)
 
     assert (storage.memory);
 
+    header = curl_slist_append (header, "Expect;");
+    header = curl_slist_append (header, "Transfer-Encoding: chunked");
+
     curl_formadd (&form1, &formend,
                   CURLFORM_COPYNAME, "file",
                   CURLFORM_FILENAME, "x11mirror.xwd.gz",
                   CURLFORM_STREAM, (void *) fh,
-                  CURLFORM_CONTENTLEN, file_size,
+                  CURLFORM_CONTENTHEADER, header,
                   CURLFORM_END);
-
-    header = curl_slist_append (header, "Expect;");
 
     curl_easy_setopt (curl, CURLOPT_HTTPPOST, form1);
     curl_easy_setopt (curl, CURLOPT_POSTFIELDSIZE, file_size);
-    curl_easy_setopt (curl, CURLOPT_HTTPHEADER, header);
     curl_easy_setopt (curl, CURLOPT_USERAGENT, "x11mirror-client/1.0");
     curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, write_cb);
     curl_easy_setopt (curl, CURLOPT_WRITEDATA, (void *) &storage);
