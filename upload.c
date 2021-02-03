@@ -1,15 +1,14 @@
-#include <stdio.h>
 #include <assert.h>
-#include <string.h>
-#include <errno.h>
-#include <stdlib.h>
 #include <curl/curl.h>
-
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static CURL *curl = NULL;
 
-
-struct MemoryStruct {
+struct MemoryStruct
+{
     char *memory;
     size_t size;
 };
@@ -18,12 +17,12 @@ struct MemoryStruct {
 extern void
 init_uploader (const char *url)
 {
-    assert(url);
+    assert (url);
 
     curl_global_init (CURL_GLOBAL_ALL);
     curl = curl_easy_init ();
 
-    assert(curl);
+    assert (curl);
 
     curl_easy_setopt (curl, CURLOPT_URL, url);
     curl_easy_setopt (curl, CURLOPT_POST, 1L);
@@ -48,7 +47,7 @@ static size_t
 write_cb (char *data, size_t size, size_t nmemb, void *userp)
 {
     size_t realsize = size * nmemb;
-    struct MemoryStruct *mem = (struct MemoryStruct *)userp;
+    struct MemoryStruct *mem = (struct MemoryStruct *) userp;
 
     mem->memory = realloc (mem->memory, mem->size + realsize + 1);
 
@@ -66,7 +65,7 @@ write_cb (char *data, size_t size, size_t nmemb, void *userp)
 
 
 extern int
-upload_file (FILE *fh)
+upload_file (FILE * fh)
 {
     CURLcode res;
     long file_size;
@@ -75,7 +74,7 @@ upload_file (FILE *fh)
     struct curl_slist *header = NULL;
     struct MemoryStruct storage;
 
-    assert(fh);
+    assert (fh);
 
     fseek (fh, 0L, SEEK_END);
     file_size = ftell (fh);
@@ -86,14 +85,12 @@ upload_file (FILE *fh)
 
     assert (storage.memory);
 
-    curl_formadd (
-        &form1,
-        &formend,
-        CURLFORM_COPYNAME, "file",
-        CURLFORM_FILENAME, "x11mirror.xwd.gz",
-        CURLFORM_STREAM, (void *)fh,
-        CURLFORM_CONTENTLEN, file_size,
-        CURLFORM_END);
+    curl_formadd (&form1, &formend,
+                  CURLFORM_COPYNAME, "file",
+                  CURLFORM_FILENAME, "x11mirror.xwd.gz",
+                  CURLFORM_STREAM, (void *) fh,
+                  CURLFORM_CONTENTLEN, file_size,
+                  CURLFORM_END);
 
     header = curl_slist_append (header, "Expect;");
 
@@ -102,11 +99,7 @@ upload_file (FILE *fh)
     curl_easy_setopt (curl, CURLOPT_HTTPHEADER, header);
     curl_easy_setopt (curl, CURLOPT_USERAGENT, "x11mirror-client/1.0");
     curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, write_cb);
-    curl_easy_setopt (curl, CURLOPT_WRITEDATA, (void *)&storage);
-
-#if 0
-    curl_easy_setopt (curl, CURLOPT_READFUNCTION, &read_cb);
-#endif
+    curl_easy_setopt (curl, CURLOPT_WRITEDATA, (void *) &storage);
 
     res = curl_easy_perform (curl);
 
@@ -118,7 +111,7 @@ upload_file (FILE *fh)
 #endif
 
     free (storage.memory);
-    curl_formfree(form1);
+    curl_formfree (form1);
     curl_slist_free_all (header);
 
     return (res == CURLE_OK) ? 0 : 1;
