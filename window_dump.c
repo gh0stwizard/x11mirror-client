@@ -443,7 +443,7 @@ Save_Dump (mirrorDump *dump, FILE *out)
         }
     }
 
-    debug ("xwd: Dumping %lu colors.\n", dump->xwdcolors_count);
+    debug ("xwd: Dumping %zu colors.\n", dump->xwdcolors_count);
 
     if (fwrite ((char *)dump->xwdcolors, SIZEOF(XWDColor), dump->xwdcolors_count, out)
         != dump->xwdcolors_count)
@@ -452,7 +452,7 @@ Save_Dump (mirrorDump *dump, FILE *out)
         exit (EXIT_FAILURE);
     }
 
-    debug ("xwd: Dumping pixmap.  bufsize = %lu\n", dump->image_data_size);
+    debug ("xwd: Dumping pixmap.  bufsize = %zu\n", dump->image_data_size);
 
     if (fwrite (dump->image->data, dump->image_data_size, 1, out) != 1) {
         perror ("fwrite image data");

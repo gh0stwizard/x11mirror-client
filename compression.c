@@ -38,13 +38,13 @@ save_gzip_file (mirrorDump* dump, FILE *out, int level)
                 gzerror (gz_file, &errnum));
     }
 
-    debug ("gzip: Dumping %lu colors.\n", dump->xwdcolors_count);
+    debug ("gzip: Dumping %zu colors.\n", dump->xwdcolors_count);
 
     if (gzwrite (gz_file, (char *)dump->xwdcolors,
         SIZEOF(XWDColor) * dump->xwdcolors_count) == 0)
         die ("gzfwrite failed to write colors: %s", gzerror (gz_file, &errnum));
 
-    debug ("gzip: Dumping pixmap.  bufsize = %lu\n", dump->image_data_size);
+    debug ("gzip: Dumping pixmap.  bufsize = %zu\n", dump->image_data_size);
 
     if (gzwrite (gz_file, dump->image->data, dump->image_data_size) == 0)
         die ("gzfwrite failed to write pixmap: %s", gzerror (gz_file, &errnum));
