@@ -107,6 +107,7 @@ print_usage (const char *prog)
 #ifdef USE_DELAY
     desc ("-D", "delay between making screenshots in milliseconds");
 #endif
+    desc ("--once, -O", "create a screenshot only once");
 #undef desc
 }
 
@@ -160,6 +161,8 @@ main (int argc, char *argv[])
 #ifdef HAVE_CURL
     char        *url = NULL;
 #endif
+    Bool        do_once = False;
+
 
     static struct option opts[] = {
         { "help",       no_argument,        0, 'h' },
@@ -168,6 +171,7 @@ main (int argc, char *argv[])
         { "output",     required_argument,  0, 'o' },
         { "window",     required_argument,  0, 'w' },
         { "sync-x11",   no_argument,        0, 'S' },
+        { "once",       no_argument,        0, 'O' },
 #ifdef HAVE_CURL
         { "url",        required_argument,  0, 'u' },
         { "upload",     no_argument,        0, 'U' },
@@ -184,9 +188,12 @@ main (int argc, char *argv[])
 
     while (1) {
         int index = 0;
-        opt = getopt_long (argc, argv, "hvd:o:w:Su:UzZ:D:", opts, &index);
+        opt = getopt_long (argc, argv, "hvOd:o:w:Su:UzZ:D:", opts, &index);
         if (opt == -1) break;
         switch (opt) {
+        case 'O':
+            do_once = True;
+            break;
         case 'd':
             display = optarg;
             break;
@@ -275,11 +282,16 @@ main (int argc, char *argv[])
         init_uploader (url);
     }
     /* open file in read-write mode */
-    out_file = fopen (out_file_name, "w+b");
+    const char *out_file_mode = "w+b";
 #else
     /* otherwise we need only write permissions */
-    out_file = fopen (out_file_name, "wb");
+    const char *out_file_mode = "wb";
 #endif
+
+    if (strcmp(out_file_name, "-") == 0)
+        out_file = stdout;
+    else
+        out_file = fopen (out_file_name, out_file_mode);
 
     if (out_file == NULL) {
         perror ("fopen output filename");
@@ -432,6 +444,9 @@ main (int argc, char *argv[])
             };
             nanosleep (&wtime, NULL);
 #endif
+
+            if (do_once)
+                break;
         }
         else if (my_events & (1 << 0)) {
             COMPOSITE ();
