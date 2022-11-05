@@ -28,8 +28,6 @@ init_uploader (const char *url)
     assert (curl);
 
     curl_easy_setopt (curl, CURLOPT_URL, url);
-    curl_easy_setopt (curl, CURLOPT_POST, 1L);
-    curl_easy_setopt (curl, CURLOPT_HEADER, 1L);
 #if defined(_DEBUG)
     curl_easy_setopt (curl, CURLOPT_VERBOSE, 1L);
 #else
@@ -72,17 +70,10 @@ upload_file (const char *path)
 {
     CURLcode res;
     long file_size;
-    struct curl_httppost *form1 = NULL;
-    struct curl_httppost *formend = NULL;
-    struct curl_slist *header = NULL;
     struct MemoryStruct storage;
-    FILE *fh;
     char *filename;
-
-
-    fh = fopen (path, "rb");
-
-    assert (fh);
+    curl_mime *mime = NULL;
+    curl_mimepart *part = NULL;
 
     // XXX: no critic
     filename = strrchr(path, '/');
@@ -91,28 +82,22 @@ upload_file (const char *path)
     else
         filename = (char*)path;
 
-    fseek (fh, 0L, SEEK_END);
-    file_size = ftell (fh);
-    rewind (fh);
-
     storage.memory = malloc (1);
     storage.size = 0;
 
     assert (storage.memory);
 
-    header = curl_slist_append (header, "Expect;");
-    header = curl_slist_append (header, "Transfer-Encoding: chunked");
+    /* create the form */
+    mime = curl_mime_init (curl);
+    part = curl_mime_addpart (mime);
+    curl_mime_name (part, "file");
+    curl_mime_filedata (part, path);
+    curl_mime_encoder (part, "base64");
 
-    curl_formadd (&form1, &formend,
-                  CURLFORM_COPYNAME, "file",
-                  CURLFORM_FILENAME, filename,
-                  CURLFORM_STREAM, (void *) fh,
-                  CURLFORM_CONTENTHEADER, header,
-                  CURLFORM_END);
-
-    curl_easy_setopt (curl, CURLOPT_HTTPPOST, form1);
-    curl_easy_setopt (curl, CURLOPT_POSTFIELDSIZE, file_size);
+    /* set curl options */
+    curl_easy_setopt (curl, CURLOPT_MIMEPOST, mime);
     curl_easy_setopt (curl, CURLOPT_USERAGENT, "x11mirror-client/1.0");
+
     curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, write_cb);
     curl_easy_setopt (curl, CURLOPT_WRITEDATA, (void *) &storage);
 
@@ -126,8 +111,6 @@ upload_file (const char *path)
 #endif
 
     free (storage.memory);
-    curl_formfree (form1);
-    curl_slist_free_all (header);
 
     return (res == CURLE_OK) ? 0 : 1;
 }
