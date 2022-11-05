@@ -4,8 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "common.h"
+
 
 static CURL *curl = NULL;
+
 
 struct MemoryStruct
 {
@@ -52,7 +55,7 @@ write_cb (char *data, size_t size, size_t nmemb, void *userp)
     mem->memory = realloc (mem->memory, mem->size + realsize + 1);
 
     if (mem->memory == NULL) {
-        fprintf (stderr, "curl: realloc: out of memory\n");
+        warn("!!! curl write_cb: realloc: out of memory\n");
         return 0;
     }
 
@@ -65,7 +68,7 @@ write_cb (char *data, size_t size, size_t nmemb, void *userp)
 
 
 extern int
-upload_file (FILE * fh)
+upload_file (const char * filename)
 {
     CURLcode res;
     long file_size;
@@ -73,6 +76,10 @@ upload_file (FILE * fh)
     struct curl_httppost *formend = NULL;
     struct curl_slist *header = NULL;
     struct MemoryStruct storage;
+    FILE *fh;
+
+
+    fh = fopen (filename, "rb");
 
     assert (fh);
 
@@ -104,10 +111,10 @@ upload_file (FILE * fh)
     res = curl_easy_perform (curl);
 
     if (res != CURLE_OK)
-        fprintf (stderr, "curl error: %s\n", curl_easy_strerror (res));
+        warn("curl error: %s\n", curl_easy_strerror (res));
 #if defined(_DEBUG)
     else
-        fprintf (stderr, "curl response: %s\n", storage.memory);
+        warn("*** curl response: %s\n", storage.memory);
 #endif
 
     free (storage.memory);

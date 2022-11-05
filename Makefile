@@ -4,8 +4,8 @@ PKG_CONFIG ?= pkg-config
 INSTALL ?= install
 RM ?= rm -f
 
-MAJOR_VERSION = 0
-MINOR_VERSION = 2
+MAJOR_VERSION = 1
+MINOR_VERSION = 0
 PATCH_VERSION = 0
 VERSION = $(MAJOR_VERSION).$(MINOR_VERSION).$(PATCH_VERSION)
 
@@ -20,8 +20,8 @@ ifndef WITH_CURL
 export WITH_CURL = YES
 endif
 
-ifndef WITH_ZLIB
-export WITH_ZLIB = YES
+ifndef WITH_PNG
+export WITH_PNG = YES
 endif
 
 ifndef ENABLE_DELAY
@@ -51,21 +51,20 @@ else
 IGNORE_SOURCES += upload.c
 endif
 
-ifeq ($(WITH_ZLIB),YES)
-DEFS_ZLIB ?= -DHAVE_ZLIB $(shell $(PKG_CONFIG) --cflags zlib)
-LIBS_ZLIB ?= $(shell $(PKG_CONFIG) --libs zlib)
-LIBS_ZLIB_STATIC ?= $(shell $(PKG_CONFIG) --static --libs zlib)
-#LIBS_ZLIB_STATIC ?= -Wl,-Bstatic,$(LIBS_ZLIB) -Wl,-Bdynamic
+ifeq ($(WITH_PNG),YES)
+DEFS_PNG ?= -DHAVE_PNG $(shell $(PKG_CONFIG) --cflags libpng)
+LIBS_PNG ?= $(shell $(PKG_CONFIG) --libs libpng)
+LIBS_PNG_STATIC ?= $(shell $(PKG_CONFIG) --static --libs libpng)
 else
-IGNORE_SOURCES += compression.c
+IGNORE_SOURCES += topng.c
 endif
 
 #----------------------------------------------------------#
 
-DEFS ?= $(DEFS_CURL) $(DEFS_ZLIB) $(DEFS_X11)
+DEFS ?= $(DEFS_CURL) $(DEFS_PNG) $(DEFS_X11)
 DEFS += -DAPP_VERSION=$(VERSION)
 
-LIBS ?= $(LIBS_X11) $(LIBS_ZLIB) $(LIBS_CURL)
+LIBS ?= $(LIBS_X11) $(LIBS_PNG) $(LIBS_CURL)
 LIBS += -lm
 
 SOURCES = $(filter-out $(IGNORE_SOURCES), $(wildcard *.c))
@@ -94,17 +93,16 @@ clean:
 %.o: %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEFS) -o $@ -c $<
 
-window_dump.o:	window_dump.c list.h wsutils.h multiVis.h common.h
-multiVis.o:	multiVis.c list.h wsutils.h multiVis.h
-main.o:		main.c common.h window_dump.h compression.h
-compression.o:	compression.c window_dump.h common.h compression.h
+topng.o:    topng.c topng.h imgman.h
+imgman.o:   imgman.c imgman.h
+main.o:     main.c common.h imgman.h
 
 $(PROGRAM): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 
 help:
 	$(info WITH_CURL=YES|NO - enable/disable curl support, default: YES)
-	$(info WITH_ZLIB=YES|NO - enable/disable zlib support, default: YES)
+	$(info WITH_PNG=YES|NO - enable/disable libpng support, default: YES)
 	$(info ENABLE_DELAY=YES|NO - use delay between screenshots, default: YES)
 	$(info ENABLE_DEBUG=YES|NO - be verbose and print debug information, default: NO)
 	$(info ENABLE_ERRORS=YES|NO - print errors to STDERR, default: YES)
