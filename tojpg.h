@@ -5,8 +5,8 @@
 #include <X11/Xlib.h>
 
 
-#ifndef JPG_QUALITY
-#define JPG_QUALITY 85
+#ifndef _JPG_QUALITY
+#define _JPG_QUALITY 85
 #endif
 
 

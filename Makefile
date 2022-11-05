@@ -25,7 +25,7 @@ export WITH_PNG = YES
 endif
 
 ifndef WITH_JPG
-export WITH_JPG = NO
+export WITH_JPG = YES
 endif
 
 ifndef ENABLE_DELAY
@@ -103,7 +103,7 @@ clean:
 	$(RM) $(PROGRAM) $(OBJECTS)
 
 %.o: %.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEFS) -o $@ -c $<
+	$(CC) $(CPPFLAGS) $(DEFS) $(CFLAGS) -o $@ -c $<
 
 topng.o:    topng.c topng.h
 tojpg.o:    tojpg.c tojpg.h
@@ -116,7 +116,7 @@ $(PROGRAM): $(OBJECTS)
 help:
 	$(info WITH_CURL=YES|NO - enable/disable curl support, default: YES)
 	$(info WITH_PNG=YES|NO - enable/disable libpng support, default: YES)
-	$(info WITH_JPG=YES|NO - enable/disable libturbojpeg support, default: YES)
+	$(info WITH_JPG=YES|NO - enable/disable libjpeg-turbo support, default: YES)
 	$(info ENABLE_DELAY=YES|NO - use delay between screenshots, default: YES)
 	$(info ENABLE_DEBUG=YES|NO - be verbose and print debug information, default: NO)
 	$(info ENABLE_ERRORS=YES|NO - print errors to STDERR, default: YES)

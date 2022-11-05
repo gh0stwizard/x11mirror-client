@@ -77,7 +77,7 @@ tojpg_save_ximage(XImage *ximg, const char *path)
     initjpg(&cinfo, ximg);
 
     jpeg_set_defaults(&cinfo);
-    jpeg_set_quality(&cinfo, JPG_QUALITY, TRUE);
+    jpeg_set_quality(&cinfo, _JPG_QUALITY, TRUE);
     jpeg_start_compress(&cinfo, TRUE);
 
     row_stride = ximg->width * BPP;
