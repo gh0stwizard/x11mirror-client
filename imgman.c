@@ -1,7 +1,12 @@
+#include <string.h>
+#include <stdbool.h>
 #include "common.h"
 #include "imgman.h"
 #ifdef HAVE_PNG
     #include "topng.h"
+#endif
+#ifdef HAVE_JPG
+    #include "tojpg.h"
 #endif
 
 
@@ -152,10 +157,11 @@ imgman_refresh_pictures(imgman_ptr m)
 
 
 extern void
-imgman_export_ximage(imgman_ptr m, XImage *image, const char *filename)
+imgman_export_ximage(XImage *image, const char *path, const char *type)
 {
-    (void)m;
-    debug(">>> exporting ximage:\n"
+    bool status = false;
+
+    debug(">>> exporting ...\n"
         "  format = %i\n"
         "  byte_order = %i\n"
         "  bitmap_unit = %i\n"
@@ -176,12 +182,39 @@ imgman_export_ximage(imgman_ptr m, XImage *image, const char *filename)
         get_shift(image->red_mask), get_shift(image->green_mask), get_shift(image->blue_mask)
     );
 
+    if (!type)
 #ifdef HAVE_PNG
-    topng_save_ximage(image, filename);
+        status = topng_save_ximage(image, path);
+#elif defined(HAVE_JPG)
+        status = tojpg_save_ximage(image, path);
 #else
-    (void)m;
-    (void)image;
-    (void)filename;
-    die("imgman_save not implemented yet");
+        status = imgman_save_image(image, path);
 #endif
+    else if (strcmp("xwd", type) == 0)
+        status = imgman_save_image(image, path);
+#ifdef HAVE_PNG
+    else if (strcmp("png", type) == 0)
+        status = topng_save_ximage(image, path);
+#endif
+#ifdef HAVE_JPG
+    else if (strcmp("jpg", type) == 0)
+        status = tojpg_save_ximage(image, path);
+#endif
+    else
+        die("imgman_export_ximage: unsupported output type: %s\n", type);
+
+    if (status)
+        debug ("*** exported to %s\n", path);
+    else
+        debug ("!!! failed to export %s\n", path);
+}
+
+
+extern bool
+imgman_save_image(XImage *ximg, const char *path)
+{
+    (void)ximg;
+    (void)path;
+    die("imgman_save_ximage does not implemented yet\n");
+    return false;
 }

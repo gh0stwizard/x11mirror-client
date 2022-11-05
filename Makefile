@@ -24,6 +24,10 @@ ifndef WITH_PNG
 export WITH_PNG = YES
 endif
 
+ifndef WITH_JPG
+export WITH_JPG = NO
+endif
+
 ifndef ENABLE_DELAY
 export ENABLE_DELAY = YES
 endif
@@ -59,12 +63,20 @@ else
 IGNORE_SOURCES += topng.c
 endif
 
+ifeq ($(WITH_JPG),YES)
+DEFS_JPG ?= -DHAVE_JPG $(shell $(PKG_CONFIG) --cflags libjpeg)
+LIBS_JPG ?= $(shell $(PKG_CONFIG) --libs libjpeg)
+LIBS_JPG_STATIC ?= $(shell $(PKG_CONFIG) --static --libs libjpeg)
+else
+IGNORE_SOURCES += tojpg.c
+endif
+
 #----------------------------------------------------------#
 
-DEFS ?= $(DEFS_CURL) $(DEFS_PNG) $(DEFS_X11)
+DEFS ?= $(DEFS_CURL) $(DEFS_PNG) $(DEFS_JPG) $(DEFS_X11)
 DEFS += -DAPP_VERSION=$(VERSION)
 
-LIBS ?= $(LIBS_X11) $(LIBS_PNG) $(LIBS_CURL)
+LIBS ?= $(LIBS_X11) $(LIBS_PNG) $(LIBS_JPG) $(LIBS_CURL)
 LIBS += -lm
 
 SOURCES = $(filter-out $(IGNORE_SOURCES), $(wildcard *.c))
@@ -93,7 +105,8 @@ clean:
 %.o: %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEFS) -o $@ -c $<
 
-topng.o:    topng.c topng.h imgman.h
+topng.o:    topng.c topng.h
+tojpg.o:    tojpg.c tojpg.h
 imgman.o:   imgman.c imgman.h
 main.o:     main.c common.h imgman.h
 
@@ -103,6 +116,7 @@ $(PROGRAM): $(OBJECTS)
 help:
 	$(info WITH_CURL=YES|NO - enable/disable curl support, default: YES)
 	$(info WITH_PNG=YES|NO - enable/disable libpng support, default: YES)
+	$(info WITH_JPG=YES|NO - enable/disable libturbojpeg support, default: YES)
 	$(info ENABLE_DELAY=YES|NO - use delay between screenshots, default: YES)
 	$(info ENABLE_DEBUG=YES|NO - be verbose and print debug information, default: NO)
 	$(info ENABLE_ERRORS=YES|NO - print errors to STDERR, default: YES)

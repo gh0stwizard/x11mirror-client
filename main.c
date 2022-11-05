@@ -43,7 +43,8 @@ static int xfixes_event, xfixes_error;
 static int damage_event, damage_error;
 /*static int xshape_event, xshape_error;*/
 
-static char *out_file_name;
+static char *output_path;
+static char *output_type;
 
 #define _STR(x) #x
 #define STR(x) _STR(x)
@@ -58,12 +59,22 @@ static char *out_file_name;
 #endif
 #endif
 
-#ifndef _OUTPUT_FILE
+#ifndef _OUTPUT_TYPE
 #ifdef HAVE_PNG
-    #define _OUTPUT_FILE /tmp/x11mirror.png
+#define _OUTPUT_TYPE png
+#elif defined(HAVE_JPG)
+#define _OUTPUT_TYPE jpg
 #else
-    #define _OUTPUT_FILE /tmp/x11mirror.xwd
+#define _OUTPUT_TYPE xwd
 #endif
+#endif
+
+#ifndef _OUTPUT_TMPL
+#define _OUTPUT_TMPL /tmp/x11mirror
+#endif
+
+#ifndef _OUTPUT_FILE
+#define _OUTPUT_FILE _OUTPUT_TMPL._OUTPUT_TYPE
 #endif
 
 #ifdef HAVE_CURL
@@ -84,6 +95,7 @@ print_usage (const char *prog)
     desc ("--version, -v", "print the program version");
     desc ("-d display", "connection string to X11");
     desc ("-o output", "output filename, default: " STR(_OUTPUT_FILE));
+    desc ("-f format", "output format, default: " STR(_OUTPUT_TYPE));
     desc ("-w window", "target window id, default: root");
     desc ("-S", "enable X11 synchronization, default: disabled");
 #ifdef HAVE_CURL
@@ -123,6 +135,8 @@ print_version ()
 }
 
 
+
+
 extern int
 main (int argc, char *argv[])
 {
@@ -141,13 +155,13 @@ main (int argc, char *argv[])
     char        *url = NULL;
 #endif
     Bool        do_once = False;
+    char        pathbuf[PATH_MAX];
 
     /* our little image manager */
     imgman      m = {
         .init = imgman_init,
         .on_update = imgman_update_wa,
         .create_ximage = imgman_create_ximage,
-        .export_ximage = imgman_export_ximage,
         .destroy = imgman_destroy
     };
 
@@ -156,6 +170,7 @@ main (int argc, char *argv[])
         { "version",    no_argument,        0, 'v' },
         { "display",    required_argument,  0, 'd' },
         { "output",     required_argument,  0, 'o' },
+        { "format",     required_argument,  0, 'f' },
         { "window",     required_argument,  0, 'w' },
         { "sync-x11",   no_argument,        0, 'S' },
         { "once",       no_argument,        0, 'O' },
@@ -171,7 +186,7 @@ main (int argc, char *argv[])
 
     while (1) {
         int index = 0;
-        opt = getopt_long (argc, argv, "hvOd:o:w:Su:UzZ:D:", opts, &index);
+        opt = getopt_long (argc, argv, "hvOd:o:f:w:Su:UD:", opts, &index);
         if (opt == -1) break;
         switch (opt) {
         case 'O':
@@ -181,7 +196,12 @@ main (int argc, char *argv[])
             display = optarg;
             break;
         case 'o':
-            out_file_name = optarg;
+            // i'm lazy to add _POSIX_C_SOURCE >= 200809L for strndup
+            strncpy(pathbuf, optarg, PATH_MAX - 1);
+            output_path = strdup(pathbuf);
+            break;
+        case 'f':
+            output_type = optarg;
             break;
 #ifdef HAVE_CURL
         case 'u':
@@ -217,6 +237,7 @@ main (int argc, char *argv[])
         case 'S':
             synchronize = True;
             break;
+        // FIXME: possible leak of output_path
         case 'h':
             print_usage (argv[0]);
             exit (EXIT_SUCCESS);
@@ -229,17 +250,16 @@ main (int argc, char *argv[])
         }
     }
 
-    if (out_file_name == NULL) {
-        out_file_name = STR(_OUTPUT_FILE);
+    if (!(output_path || output_type)) {
+        output_path = strdup(STR(_OUTPUT_FILE));
     }
-    else {
-        int len = strlen (out_file_name);
-
-        if (len <= 0 && len >= PATH_MAX)
-            die ("invalid length of output filename.");
+    else if (!output_path) {
+        snprintf(pathbuf, PATH_MAX, "%s.%s", STR(_OUTPUT_TMPL), output_type);
+        output_path = strdup(pathbuf);
     }
 
-    debug ("output file: %s\n", out_file_name);
+    debug ("output file: %s\noutput type: %s\n",
+            output_path, output_type ? output_type : STR(_OUTPUT_TYPE));
 
 #ifdef HAVE_CURL
     /* initialize curl first */
@@ -247,7 +267,7 @@ main (int argc, char *argv[])
         url = _UPLOAD_URL;
 
     if (enable_upload) {
-        debug ("uploading to %s\n", url);
+        debug ("upload URL: %s\n", url);
         init_uploader (url);
     }
 #endif
@@ -403,7 +423,7 @@ main (int argc, char *argv[])
             save_file (&m);
 #ifdef HAVE_CURL
             if (enable_upload)
-                upload_file (out_file_name);
+                upload_file (output_path);
 #endif
             if (do_once)
                 break;
@@ -429,6 +449,7 @@ done:
 #ifdef HAVE_CURL
     free_uploader ();
 #endif
+    free(output_path);
 
     return 0;
 }
@@ -505,7 +526,7 @@ static inline void
 save_file (imgman_ptr m)
 {
     XImage *image = m->create_ximage(m);
-    m->export_ximage(m, image, out_file_name);
+    imgman_export_ximage(image, output_path, output_type);
     XDestroyImage(image);
 }
 

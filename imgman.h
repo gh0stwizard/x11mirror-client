@@ -1,6 +1,7 @@
 #ifndef X11MIRROR_IMGMAN_H
 #define X11MIRROR_IMGMAN_H
 
+#include <stdbool.h>
 #include <unistd.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -20,7 +21,6 @@ typedef struct imgman_struct {
     METHOD(void, init, (imgman_ptr m, Display *dpy, Window window));
     METHOD(void, on_update, (imgman_ptr m));
     METHOD(XImage*, create_ximage, (imgman_ptr m));
-    METHOD(void, export_ximage, (imgman_ptr m, XImage *image, const char *filename));
     METHOD(void, destroy, (imgman_ptr m));
     Display *dpy;
     int screen;
@@ -64,7 +64,7 @@ imgman_composite(imgman_ptr m);
 
 
 extern void
-imgman_export_ximage(imgman_ptr m, XImage *image, const char *filename);
+imgman_export_ximage(XImage *image, const char *path, const char *type);
 
 
 extern void
@@ -73,6 +73,10 @@ imgman_update_wa(imgman_ptr m);
 
 extern void
 imgman_refresh_pictures(imgman_ptr m);
+
+
+extern bool
+imgman_save_image(XImage *ximg, const char *path);
 
 
 #endif /* X11MIRROR_IMGMAN_H */
