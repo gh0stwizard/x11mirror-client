@@ -68,7 +68,7 @@ write_cb (char *data, size_t size, size_t nmemb, void *userp)
 
 
 extern int
-upload_file (const char * filename)
+upload_file (const char *path)
 {
     CURLcode res;
     long file_size;
@@ -77,11 +77,19 @@ upload_file (const char * filename)
     struct curl_slist *header = NULL;
     struct MemoryStruct storage;
     FILE *fh;
+    char *filename;
 
 
-    fh = fopen (filename, "rb");
+    fh = fopen (path, "rb");
 
     assert (fh);
+
+    // XXX: no critic
+    filename = strrchr(path, '/');
+    if (filename)
+        filename++;
+    else
+        filename = (char*)path;
 
     fseek (fh, 0L, SEEK_END);
     file_size = ftell (fh);
@@ -97,7 +105,7 @@ upload_file (const char * filename)
 
     curl_formadd (&form1, &formend,
                   CURLFORM_COPYNAME, "file",
-                  CURLFORM_FILENAME, "x11mirror.xwd.gz",
+                  CURLFORM_FILENAME, filename,
                   CURLFORM_STREAM, (void *) fh,
                   CURLFORM_CONTENTHEADER, header,
                   CURLFORM_END);
