@@ -10,7 +10,11 @@ A video is worth a thousand words:
 [video demonstration on YouTube](https://youtu.be/4Kz16FlFcjQ) ~7min.
 
 The [x11mirror-server][1] is a HTTP server which demonstrated
-in the video above. It is a complementary part for `x11mirror-client`.
+in the video above. It was a complementary part of **x11mirror-client**.
+The current version does not need it anymore.
+
+An example configuration of nginx could be found inside of the
+[misc/nginx](/misc/nginx) directory.
 
 
 ## Features
