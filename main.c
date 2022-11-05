@@ -364,11 +364,16 @@ main (int argc, char *argv[])
             case ConfigureNotify:
             case MapNotify: {
                 if (ev.xconfigure.window == window) {
-                    m.on_update(&m);
                     my_events |= 1 << 2;
                 }
             }   break;
-            case DestroyNotify:
+            case UnmapNotify: { // 18
+                /* generated when a window is minimized or closed */
+                if (ev.xconfigure.window == window) {
+                    my_events |= 1 << 3;
+                }
+            }   break;
+            case DestroyNotify: // 17
                 if (ev.xunmap.window == window)
                     goto done;
                 break;
@@ -384,8 +389,12 @@ main (int argc, char *argv[])
             struct timeval wtime = { 0, 500000 };
             select (fd + 1, &fdset, NULL, NULL, &wtime);
         }
+        else if (my_events & (1 <<  3)) {
+            m.on_update(&m);
+        }
         else if (my_events & (1 << 2)) {
             debug ("  ***** refresh *****\n");
+            m.on_update(&m);
             imgman_refresh_pictures(&m);
             imgman_composite(&m);
         }
@@ -396,6 +405,8 @@ main (int argc, char *argv[])
             if (enable_upload)
                 upload_file (out_file_name);
 #endif
+            if (do_once)
+                break;
 #ifdef USE_DELAY
             struct timespec wtime = {
                 .tv_sec = delay_sec,
@@ -403,8 +414,6 @@ main (int argc, char *argv[])
             };
             nanosleep (&wtime, NULL);
 #endif
-            if (do_once)
-                break;
         }
         else if (my_events & (1 << 0)) {
             imgman_composite(&m);
