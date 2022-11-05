@@ -91,21 +91,21 @@ print_usage (const char *prog)
     printf ("Usage: %s [-w window] [OPTIONS]\n", prog);
     printf ("Options:\n");
 #define desc(o,d) printf ("  %-16s  %s\n", o, d);
-    desc ("--help, -h", "print this help");
-    desc ("--version, -v", "print the program version");
-    desc ("-d display", "connection string to X11");
-    desc ("-o output", "output filename, default: " STR(_OUTPUT_FILE));
-    desc ("-f format", "output format, default: " STR(_OUTPUT_TYPE));
-    desc ("-w window", "target window id, default: root");
+    desc ("-h, --help", "print this help");
+    desc ("-v, --version", "print the program version");
+    desc ("-d <display>", "connection string to X11");
+    desc ("-o <output>", "output filename, default: " STR(_OUTPUT_FILE));
+    desc ("-f <format>", "output format (png, jpg, xwd), default: " STR(_OUTPUT_TYPE));
+    desc ("-w <window>", "target window id, default: root");
     desc ("-S", "enable X11 synchronization, default: disabled");
 #ifdef HAVE_CURL
-    desc ("-u URL", "an URL to send data");
+    desc ("-u <URL>", "an URL to send data");
     desc ("-U", "enable uploading, default: disabled");
 #endif
 #ifdef USE_DELAY
-    desc ("-D", "delay between making screenshots in milliseconds");
+    desc ("-D <ms>", "delay between taking screenshots in milliseconds");
 #endif
-    desc ("--once, -O", "create a screenshot only once");
+    desc ("-O, --once", "create a screenshot only once");
 #undef desc
 }
 
@@ -119,6 +119,9 @@ print_version ()
 #endif
 #ifdef HAVE_PNG
         " +png"
+#endif
+#ifdef HAVE_JPG
+        " +jpg"
 #endif
 #ifdef _DEBUG
         " +debug"
