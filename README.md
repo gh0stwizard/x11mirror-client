@@ -100,17 +100,17 @@ Please see options below to understand basics:
 % ./x11mirror-client --help
 Usage: ./x11mirror-client [-w window] [OPTIONS]
 Options:
-  --help, -h        print this help
-  --version, -v     print the program version
-  -d display        connection string to X11
-  -o output         output filename, default: /tmp/x11mirror.png
-  -f format         output format, default: png
-  -w window         target window id, default: root
+  -h, --help        print this help
+  -v, --version     print the program version
+  -d <display>      connection string to X11
+  -o <output>       output filename, default: /tmp/x11mirror.png
+  -f <format>       output format (png, jpg, xwd), default: png
+  -w <window>       target window id, default: root
   -S                enable X11 synchronization, default: disabled
-  -u URL            an URL to send data
+  -u <URL>          an URL to send data
   -U                enable uploading, default: disabled
-  -D                delay between making screenshots in milliseconds
-  --once, -O        create a screenshot only once
+  -D <ms>           delay between taking screenshots in milliseconds
+  -O, --once        create a screenshot only once
 ```
 
 Quickstart command:

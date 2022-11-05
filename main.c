@@ -99,7 +99,7 @@ print_usage (const char *prog)
     desc ("-w <window>", "target window id, default: root");
     desc ("-S", "enable X11 synchronization, default: disabled");
 #ifdef HAVE_CURL
-    desc ("-u <URL>", "an URL to send data");
+    desc ("-u <URL>", "server URL to send data");
     desc ("-U", "enable uploading, default: disabled");
 #endif
 #ifdef USE_DELAY
