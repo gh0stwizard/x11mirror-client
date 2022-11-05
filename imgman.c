@@ -9,7 +9,9 @@ extern void
 imgman_update_wa(imgman_ptr m)
 {
     debug (">>> retrieving attributes for 0x%lx\n", m->window);
-    XGetWindowAttributes (m->dpy, m->window, &(m->wa));
+    Status status = XGetWindowAttributes (m->dpy, m->window, &(m->wa));
+    if (!status)
+        die ("imgman_update_wa: can't get window attributes");
     debug_window (m->dpy, m->window, &(m->wa));
 
     int i;
