@@ -7,7 +7,7 @@
 
 
 extern bool
-topng_save_ximage(XImage *ximg, const char *filename);
+topng_save_ximage(XImage *ximg, const char *path);
 
 
 #endif  /* X11MIRROR_TOPNG_H */

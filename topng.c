@@ -4,12 +4,15 @@
 #include "common.h"
 #include "topng.h"
 
+/*
+ * credits to anonymous https://stackoverflow.com/a/38298349
+ */
 
 #define BPP 4
 
 
 static void
-initpngimage(png_image *pi, XImage *ximg)
+initpng(png_image *pi, XImage *ximg)
 {
     bzero(pi, sizeof(png_image));
     pi->version = PNG_IMAGE_VERSION;
@@ -21,27 +24,38 @@ initpngimage(png_image *pi, XImage *ximg)
         gs = get_shift(ximg->green_mask),
         bs = get_shift(ximg->blue_mask);
 
-    if (rs > gs && gs > bs)
-        pi->format = PNG_FORMAT_BGRA;
-    else if (bs > gs && gs > rs)
-        pi->format = PNG_FORMAT_RGBA;
-    else
-        die("initpngimage: unable to choose PNG format for %lu %lu %lu",
-            rs, gs, bs);
+    if (ximg->byte_order == 0) {
+        if (rs > gs && gs > bs)
+            pi->format = PNG_FORMAT_BGRA;
+        else if (bs > gs && gs > rs)
+            pi->format = PNG_FORMAT_RGBA;
+        else
+            die("initpng: unable to choose PNG format for %lu %lu %lu byte_order = %i",
+                rs, gs, bs, ximg->byte_order);
+    }
+    else { // XXX: not tested, might be wrong
+        if (rs > gs && gs > bs)
+            pi->format = PNG_FORMAT_ABGR;
+        else if (bs > gs && gs > rs)
+            pi->format = PNG_FORMAT_ARGB;
+        else
+            die("initpng: unable to choose PNG format for %lu %lu %lu byte_order = %i",
+                rs, gs, bs, ximg->byte_order);
+    }
 }
 
 
 extern bool
-topng_save_ximage(XImage *ximg, const char *filename)
+topng_save_ximage(XImage *ximg, const char *path)
 {
     png_image pi;
     FILE *fh;
 
 
-    if (strcmp(filename, "-") == 0)
+    if (strcmp(path, "-") == 0)
         fh = stdout;
     else
-        fh = fopen(filename, "w");
+        fh = fopen(path, "w");
 
 
     if (!fh)
@@ -50,7 +64,7 @@ topng_save_ximage(XImage *ximg, const char *filename)
         return false;
     }
 
-    initpngimage(&pi, ximg);
+    initpng(&pi, ximg);
 
     unsigned int scanline = pi.width * BPP; // XXX
     if (!png_image_write_to_stdio(&pi, fh, 0, ximg->data, scanline, NULL))
