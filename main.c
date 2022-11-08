@@ -314,50 +314,9 @@ main (int argc, char *argv[])
     /* select events for the window */
     xselect_input (dpy, window);
 
-/*
-    int absx, absy, x, y;
-    int dwidth, dheight;
-    unsigned width, height;
-    int nobdrs = 0;
-    XWindowAttributes win_info;
-    Window dummywin;
-    XGetWindowAttributes (dpy, window, &win_info);
-    XTranslateCoordinates (dpy, window, root, 0, 0, &absx, &absy, &dummywin);
-
-    win_info.x = absx;
-    win_info.y = absy;
-    width = win_info.width;
-    height = win_info.height;
-
-    if (!nobdrs) {
-        absx -= win_info.border_width;
-        absy -= win_info.border_width;
-        width += (2 * win_info.border_width);
-        height += (2 * win_info.border_width);
-    }
-
-    dwidth = DisplayWidth (dpy, screen);
-    dheight = DisplayHeight (dpy, screen);
-
-    // clip to window
-    if (absx < 0) width += absx, absx = 0;
-    if (absy < 0) height += absy, absy = 0;
-    // XXX: width & height could not be larger 65535 (ref. xlib manual)
-    if (absx + (int)width > dwidth) width = dwidth - absx;
-    if (absy + (int)height > dheight) height = dheight - absy;
-
-    x = absx - win_info.x;
-    y = absy - win_info.y;
-
-    debug ("x = %i (%i) y = %i (%i) w = %i (%i) h = %i (%i)\n",
-            x, win_info.x, y, win_info.y,
-            width, wa.width, height, wa.height);
-*/
-
     XFlush (dpy);
 
     debug ("waiting for events ...\n");
-
     while (1) {
         my_events = 0;
 

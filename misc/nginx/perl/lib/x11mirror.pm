@@ -24,7 +24,7 @@ sub handler {
     if ($r->request_method eq 'GET') {
         my $file_path = safe_filename($r);
 
-        if (-r $file_path && -f _) {
+        if (-r $file_path && -f _ && -s _) {
             $r->header_out('Content-Length', -s _);
             $r->allow_ranges;
             $r->send_http_header;
@@ -98,6 +98,7 @@ sub post {
                 if ($o =~ m/Content-Disposition/i) {
                     $v =~ m/(?<=filename=)\"(.*)\"/;
                     $filename = $1;
+                    last;
                 }
             }
         },
@@ -111,6 +112,7 @@ sub post {
             }
         }
     );
+#    $r->log_error(0, $body);
     $parser->parse($body);
     $parser->finish;
 

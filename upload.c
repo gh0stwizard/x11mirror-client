@@ -6,6 +6,7 @@
 #include <string.h>
 #include "common.h"
 
+/* curl_mime was added since 7.56.0 */
 #if LIBCURL_VERSION_NUM < 0x073800
     #include <b64/cencode.h>
 #endif
@@ -32,7 +33,6 @@ init_uploader (const char *url)
     assert (curl);
 
     curl_easy_setopt (curl, CURLOPT_URL, url);
-    /* curl_mime was added since 7.56.0 */
 #if LIBCURL_VERSION_NUM < 0x073800
     curl_easy_setopt (curl, CURLOPT_POST, 1L);
     curl_easy_setopt (curl, CURLOPT_HEADER, 1L);
@@ -79,22 +79,13 @@ extern int
 upload_file (const char *path)
 {
     CURLcode res;
-    long file_size;
     struct MemoryStruct storage;
-    char *filename;
     curl_mime *mime = NULL;
     curl_mimepart *part = NULL;
 
-    // XXX: no critic
-    filename = strrchr(path, '/');
-    if (filename)
-        filename++;
-    else
-        filename = (char*)path;
 
     storage.memory = malloc (1);
     storage.size = 0;
-
     assert (storage.memory);
 
     /* create the form */
@@ -107,7 +98,6 @@ upload_file (const char *path)
     /* set curl options */
     curl_easy_setopt (curl, CURLOPT_MIMEPOST, mime);
     curl_easy_setopt (curl, CURLOPT_USERAGENT, "x11mirror-client/1.0");
-
     curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, write_cb);
     curl_easy_setopt (curl, CURLOPT_WRITEDATA, (void *) &storage);
 
@@ -126,7 +116,7 @@ upload_file (const char *path)
 }
 #else
 /*
- * libcurl < 7.56.0
+ * libcurl < 7.56.0 + libb64
  */
 
 struct FileStruct {

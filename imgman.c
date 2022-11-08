@@ -125,7 +125,7 @@ imgman_create_ximage(imgman_ptr m)
     image->green_mask = out_format->direct.greenMask << out_format->direct.green;
     image->blue_mask = out_format->direct.blueMask << out_format->direct.blue;
     image->depth = out_format->depth;
-    debug ("*** created ximage\n");
+    debug ("*** ximage successfully created\n");
     return image;
 }
 
