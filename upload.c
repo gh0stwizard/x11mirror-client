@@ -4,8 +4,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "common.h"
+
+/* curl_mime was added since 7.56.0 */
+#if LIBCURL_VERSION_NUM < 0x073800
+    #include <b64/cencode.h>
+#endif
+
 
 static CURL *curl = NULL;
+
 
 struct MemoryStruct
 {
@@ -25,8 +33,10 @@ init_uploader (const char *url)
     assert (curl);
 
     curl_easy_setopt (curl, CURLOPT_URL, url);
+#if LIBCURL_VERSION_NUM < 0x073800
     curl_easy_setopt (curl, CURLOPT_POST, 1L);
     curl_easy_setopt (curl, CURLOPT_HEADER, 1L);
+#endif
 #if defined(_DEBUG)
     curl_easy_setopt (curl, CURLOPT_VERBOSE, 1L);
 #else
@@ -52,7 +62,7 @@ write_cb (char *data, size_t size, size_t nmemb, void *userp)
     mem->memory = realloc (mem->memory, mem->size + realsize + 1);
 
     if (mem->memory == NULL) {
-        fprintf (stderr, "curl: realloc: out of memory\n");
+        warn("!!! curl write_cb: realloc: out of memory\n");
         return 0;
     }
 
@@ -64,39 +74,29 @@ write_cb (char *data, size_t size, size_t nmemb, void *userp)
 }
 
 
+#if LIBCURL_VERSION_NUM >= 0x073800
 extern int
-upload_file (FILE * fh)
+upload_file (const char *path)
 {
     CURLcode res;
-    long file_size;
-    struct curl_httppost *form1 = NULL;
-    struct curl_httppost *formend = NULL;
-    struct curl_slist *header = NULL;
     struct MemoryStruct storage;
+    curl_mime *mime = NULL;
+    curl_mimepart *part = NULL;
 
-    assert (fh);
-
-    fseek (fh, 0L, SEEK_END);
-    file_size = ftell (fh);
-    rewind (fh);
 
     storage.memory = malloc (1);
     storage.size = 0;
-
     assert (storage.memory);
 
-    header = curl_slist_append (header, "Expect;");
-    header = curl_slist_append (header, "Transfer-Encoding: chunked");
+    /* create the form */
+    mime = curl_mime_init (curl);
+    part = curl_mime_addpart (mime);
+    curl_mime_name (part, "file");
+    curl_mime_filedata (part, path);
+    curl_mime_encoder (part, "base64");
 
-    curl_formadd (&form1, &formend,
-                  CURLFORM_COPYNAME, "file",
-                  CURLFORM_FILENAME, "x11mirror.xwd.gz",
-                  CURLFORM_STREAM, (void *) fh,
-                  CURLFORM_CONTENTHEADER, header,
-                  CURLFORM_END);
-
-    curl_easy_setopt (curl, CURLOPT_HTTPPOST, form1);
-    curl_easy_setopt (curl, CURLOPT_POSTFIELDSIZE, file_size);
+    /* set curl options */
+    curl_easy_setopt (curl, CURLOPT_MIMEPOST, mime);
     curl_easy_setopt (curl, CURLOPT_USERAGENT, "x11mirror-client/1.0");
     curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, write_cb);
     curl_easy_setopt (curl, CURLOPT_WRITEDATA, (void *) &storage);
@@ -104,15 +104,133 @@ upload_file (FILE * fh)
     res = curl_easy_perform (curl);
 
     if (res != CURLE_OK)
-        fprintf (stderr, "curl error: %s\n", curl_easy_strerror (res));
+        warn("curl error: %s\n", curl_easy_strerror (res));
 #if defined(_DEBUG)
     else
-        fprintf (stderr, "curl response: %s\n", storage.memory);
+        warn("*** curl response: %s\n", storage.memory);
 #endif
 
     free (storage.memory);
-    curl_formfree (form1);
-    curl_slist_free_all (header);
 
     return (res == CURLE_OK) ? 0 : 1;
 }
+#else
+/*
+ * libcurl < 7.56.0 + libb64
+ */
+
+struct FileStruct {
+    FILE *fh;
+    size_t size;
+    char *buf;
+    size_t bufsize;
+    base64_encodestate b64_state;
+};
+
+
+static size_t
+read_cb_base64 (char *buf, size_t size, size_t nitems, void *userp)
+{
+    struct FileStruct *up = (struct FileStruct *)userp;
+    size_t buf_size = size * nitems;
+    size_t read = 0;
+    int r = 0;
+
+
+    if (buf_size > 2 * up->bufsize || up->bufsize >= buf_size) {
+        up->bufsize = buf_size / 2;
+        up->buf = realloc (up->buf, up->bufsize);
+        if (!up->buf) {
+            warn ("!!! read_cb_base64 realloc: out of memory\n");
+            return 0;
+        }
+    }
+
+    read = fread (up->buf, size, up->bufsize, up->fh);
+    if (read > 0)
+        r = base64_encode_block (up->buf, read, buf, &(up->b64_state));
+    else if (feof(up->fh))
+        return 0;
+
+//    debug ("*** size = %zu read = %zu r = %i\n", up->size, read, r);
+
+    up->size -= read;
+    if (up->size == 0)
+        r += base64_encode_blockend(buf+r, &(up->b64_state));
+
+    return r;
+}
+
+
+extern int
+upload_file (const char *path)
+{
+    CURLcode res;
+    long file_size;
+    struct curl_httppost *form1 = NULL;
+    struct curl_httppost *formend = NULL;
+    struct curl_slist *chunk = NULL;
+    struct FileStruct rddata;
+    struct MemoryStruct wrdata;
+    FILE *fh;
+    char *filename;
+
+
+    wrdata.memory = malloc (1);
+    wrdata.size = 0;
+    assert (wrdata.memory);
+
+    // XXX: no critic
+    filename = strrchr(path, '/');
+    if (filename)
+        filename++;
+    else
+        filename = (char*)path;
+
+
+    fh = fopen (path, "rb");
+    assert (fh);
+    fseek (fh, 0L, SEEK_END);
+    file_size = ftell (fh);
+    rewind (fh);
+
+    rddata.fh = fh;
+    rddata.bufsize = sizeof(unsigned char) * 1024;
+    rddata.buf = malloc (rddata.bufsize);
+    rddata.size = file_size;
+    base64_init_encodestate(&(rddata.b64_state));
+
+    chunk = curl_slist_append(chunk, "Transfer-Encoding: chunked");
+    res = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
+
+    curl_formadd (&form1, &formend,
+                  CURLFORM_COPYNAME, "file",
+                  CURLFORM_FILENAME, filename,
+                  CURLFORM_STREAM, (void *) &rddata,
+                  CURLFORM_END);
+
+    curl_easy_setopt (curl, CURLOPT_HTTPPOST, form1);
+    curl_easy_setopt (curl, CURLOPT_USERAGENT, "x11mirror-client/1.0");
+    curl_easy_setopt (curl, CURLOPT_READFUNCTION, read_cb_base64);
+    curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, write_cb);
+    curl_easy_setopt (curl, CURLOPT_WRITEDATA, (void *) &wrdata);
+
+    res = curl_easy_perform (curl);
+
+    if (res != CURLE_OK)
+        warn("curl error: %s\n", curl_easy_strerror (res));
+#if defined(_DEBUG)
+    else
+        warn("*** curl response: %s\n", wrdata.memory);
+#endif
+
+    rddata.fh = NULL;
+    fclose (fh);
+    free (rddata.buf);
+    free (wrdata.memory);
+    curl_formfree (form1);
+    curl_slist_free_all (chunk);
+
+    return (res == CURLE_OK) ? 0 : 1;
+}
+#endif

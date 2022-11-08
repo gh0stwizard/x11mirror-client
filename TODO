@@ -1,2 +1,4 @@
 * snip FIXES extention
-* give a possibility to work with/without sending data to server
+V give a possibility to work with/without sending data to server
+* Get format 24 bit + XGetImage and use on JCS_RGB (BPP = 3)
+* get back xwd support (really?)

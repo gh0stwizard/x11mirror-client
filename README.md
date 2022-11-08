@@ -10,20 +10,25 @@ A video is worth a thousand words:
 [video demonstration on YouTube](https://youtu.be/4Kz16FlFcjQ) ~7min.
 
 The [x11mirror-server][1] is a HTTP server which demonstrated
-in the video above. It is a complementary part for `x11mirror-client`.
+in the video above. It was a complementary part of **x11mirror-client**.
+The current version does not need it anymore.
+
+An example configuration of nginx could be found inside of the
+[misc/nginx](/misc/nginx) directory.
 
 
 ## Features
 
 * Don't create any windows for a work.
-* Supports zlib to compress huge XWD format.
+* Supports PNG or JPEG output formats.
 * Supports curl to upload files.
 
 
 ## Dependecies
 
 * X11 development headers (X11, Xcomposite, Xrender, Xdamage)
-* zlib (optional)
+* [libpng][18] (optional)
+* [libjpeg-turbo][19] (optional)
 * curl (optional)
 * GNU make (to build)
 * C99 compiler (gcc, clang, etc)
@@ -32,12 +37,13 @@ in the video above. It is a complementary part for `x11mirror-client`.
 ## Build
 
 Currently tested only on GNU/Linux. By default the program is building 
-with CURL & ZLIB support. Use `make help` to see general options:
+with CURL & PNG support. Use `make help` to see general options:
 
 ```
 % make help
 WITH_CURL=YES|NO - enable/disable curl support, default: YES
-WITH_ZLIB=YES|NO - enable/disable zlib support, default: YES
+WITH_PNG=YES|NO - enable/disable libpng support, default: YES
+WITH_JPG=YES|NO - enable/disable libjpeg-turbo support, default: YES
 ENABLE_DELAY=YES|NO - use delay between screenshots, default: YES
 ENABLE_DEBUG=YES|NO - be verbose and print debug information, default: NO
 ENABLE_ERRORS=YES|NO - print errors to STDERR, default: YES
@@ -47,8 +53,10 @@ Additional options that should be passed via `CFLAGS`:
 
 * `_DELAY_SEC`, `_DELAY_NSEC` - default is `1` and `0` respectively.
 * `_UPLOAD_URL` - default is `"http://localhost:8888/"`.
-* `_OUTPUT_FILE` - default is `/tmp/x11mirror.xwd`.
-* `_ZLIB_DEFAULT_LEVEL` - default is 7.
+* `_OUTPUT_TMPL` - default is `/tmp/x11mirror`.
+* `_OUTPUT_TYPE` - default is `png`.
+* `_OUTPUT_FILE` - default is `_OUTPUT_TMPL._OUTPUT_TYPE`.
+* `_JPG_QUALITY` - default is 85.
 
 Note that the default value is `CFLAGS=-O2`. Please, see [main.c](/main.c)
 and [Makefile](/Makefile) for details.
@@ -72,9 +80,10 @@ system. The list below shows packages to install on Void Linux:
 
 Note that on your system the package names could differ from the list above.
 
-Optionally you may install zlib and curl libriries too:
-* zlib-devel
+Optionally you may install curl, libpng, libturbojpeg libriries too:
 * libcurl-devel
+* libpng-devel
+* libjpeg-turbo-devel
 
 
 ## Usage
@@ -95,16 +104,17 @@ Please see options below to understand basics:
 % ./x11mirror-client --help
 Usage: ./x11mirror-client [-w window] [OPTIONS]
 Options:
-  --help, -h        print this help
-  -d display        connection string to X11
-  -o output         output filename, default: /tmp/x11mirror.xwd
-  -w window         target window id, default: root
+  -h, --help        print this help
+  -v, --version     print the program version
+  -d <display>      connection string to X11
+  -o <output>       output filename, default: /tmp/x11mirror.png
+  -f <format>       output format (png, jpg, xwd), default: png
+  -w <window>       target window id, default: root
   -S                enable X11 synchronization, default: disabled
-  -u URL            an URL to send data
+  -u <URL>          an URL to send data
   -U                enable uploading, default: disabled
-  -z                enable gzip (zlib) compression, default: disabled
-  -Z                zlib compression level (1-9), default: 7
-  -D                delay between making screenshots in milliseconds
+  -D <ms>           delay between taking screenshots in milliseconds
+  -O, --once        create a screenshot only once
 ```
 
 Quickstart command:
@@ -113,7 +123,7 @@ Quickstart command:
 % ./x11mirror-client
 ```
 
-By default the latest screenshot file could been found in `/tmp/x11mirror.xwd`
+By default the latest screenshot file could been found in `/tmp/x11mirror.png`
 (not compressed) and it will be updated every 1 second.
 
 You can stop the program at any time by pressing `CTRL+C` on keyboard.
@@ -124,7 +134,8 @@ You can stop the program at any time by pressing `CTRL+C` on keyboard.
 The *x11mirror-client* can be built in different ways:
 
 * Without CURL support
-* Without ZLIB support
+* Without PNG support
+* Without JPEG support
 
 If the program was built with CURL support it can send
 screenshots to a remote HTTP server in automatic mode.
@@ -135,54 +146,33 @@ the specified file.
 Default values are:
 
 * Remote server URL: `http://localhost:8888/`
-* Output file: `/tmp/x11mirror.xwd`
+* Output file: `/tmp/x11mirror.png`
 
-In any case the program will store a screenshot to a file. The original
-idea was to keep the screenshot into the program's memory.
-May be I will implement it later.
+The program will print out the output data on the screen,
+if specified output file is equal to `-`.
 
 Because of fact that the file will be frequently updated I advise you to
 use `tmpfs`.
 
 
-#### Why ZLIB?
+#### Output formats (PNG, JPG, etc)
 
-The XWD format consumes a lot of disk space. To understand this better,
-please look at these numbers:
+The default preference of output format is:
+* PNG (good quality, small output file size)
+* JPG (fast, bad quality)
+* XWD (unsupported at the moment)
 
-```
--rw------- 1 xxx xxx 4.1M Mar 23 22:55 xmc.xwd
--rw------- 1 xxx xxx  74K Mar 23 22:41 xmc.xwd.gz
-```
-
-The files contain the same screenshot of the whole display with the
-resolution 1366x768 pixels.
-
-
-#### How do I convert XWD to PNG, JPEG?
-
-Well, it is quite common question in Internet. You have to use `convert`
-utility from ImageMagick package. For instance, to convert XWD to JPG
-just type in console the next command:
+You may change the output format by using `--format`, `-f` command
+line option:
 
 ```
-% convert xwd:input_file.xwd jpg:output_file.jpg
+% ./x11mirror-client -f jpg
 ```
 
-The `convert` utility understands gzipped XWD files too, so you don't
-need to `gunzip` them:
-
-```
-% convert xwd:input_file.xwd.gz jpg:output_file.jpg
-```
-
-One note to be mention: the ImageMagick on your system must be built
-with X11 support. You may check if its ok by the next command:
-
-```
-% convert -list format | grep XWD
-      XWD* XWD       rw-   X Windows system window dump (color)
-```
+Acceptable format values:
+* `png`
+* `jpg`
+* `xwd`
 
 
 #### Window ID
@@ -213,42 +203,33 @@ option, for instance:
 By default `x11mirror-client` uses the root window (whole screen).
 
 
-### Case 1: save the current screenshot to a XWD file
+### Case 1: save the current screenshot to a file
 
 In this case the program stores the screenshot of the window or the
-whole display to one file. By default the outfile have the XWD format.
+whole display to one file. By default the outfile have the PNG format.
 Use the `-o` option to specify a different location of the output file:
 
 ```
-% ./x11mirror-client -o /path/to/x11mirror.xwd
+% ./x11mirror-client -o /path/to/x11mirror.png
 ```
 
-The default output filepath is `/tmp/x11mirror.xwd`.
+The default output filepath is `/tmp/x11mirror.png` (when built with
+PNG support).
 
-
-### Case 2: save the current screenshot to a gzip file
-
-Same as above but with a compression of the outfile to gzip format.
-The example below have an additional the `-z` option.
+To save as a JPEG file:
 
 ```
-% ./x11mirror-client -o /path/to/x11mirror.xwd.gz -z
+% ./x11mirror-client -o /path/to/x11mirror.jpg -f jpg
 ```
 
-You may also specify a compression level via `-Z` option. For instance,
-use the fastest compression:
+or to save to default location as `/tmp/x11mirror.jpg`:
 
 ```
-% ./x11mirror-client -o /path/to/x11mirror.xwd.gz -z -Z 1
+% ./x11mirror-client -f jpg
 ```
 
-The default compression level is `7`. Note that if you not specify the output
-filepath, then `x11mirror.xwd` will use `/tmp/x11mirror.xwd` without appended
-`.gz` extension. This would not break `convert` utility to recognize the
-correct file format.
 
-
-### Case 3: send the current screenshot to a remote server via HTTP
+### Case 2: send the current screenshot to a remote server via HTTP
 
 You may combine the options above to get an acceptable result.
 The *x11mirror-client* do a simple POST request to the remote server
@@ -287,7 +268,7 @@ screenshots each 2 seconds you have to run *x11mirror-client* in such way:
 
 The default delay value is the 1 second (e.g. `-D 1000`).
 
-If you would like to send screenshots without a delay you may re-build
+You may disable the delay by passing `-D 0`. Either you may re-build
 the program with passing `ENABLE_DELAY=NO` to `make`.
 See also [Makefile](/Makefile) for details.
 
@@ -433,19 +414,23 @@ to us, as I mentioned before.
 That's all.
 
 
-
-
 ## See also
 
 1. You may found the server to test the program here: [x11mirror-server][1]
 
 2. [Keylogger][2] for X11
 
+3. [scrot][20] - depends on [imlib2][22]
+
+4. [maim][21] - a small screenshot utility written in C++
+
 
 ## Credits
 
 Parts of the program contains a code provided by the [xwd][3] utility
 wrote by The Open Group & Hewlett-Packard Co.
+
+[libb64][23] written by Chris Venter
 
 
 ## References
@@ -503,3 +488,9 @@ find a place in Internet which explains X11 extentions in a such simple way.
 [15]: http://www.zlib.net/manual.html
 [16]: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html
 [17]: https://xcb.freedesktop.org/XcbApi/
+[18]: http://www.libpng.org/
+[19]: https://libjpeg-turbo.org/
+[20]: https://github.com/resurrecting-open-source-projects/scrot/
+[21]: https://github.com/naelstrof/maim/
+[22]: https://sourceforge.net/projects/enlightenment/files/imlib2-src/
+[23]: https://libb64.sourceforge.net/
