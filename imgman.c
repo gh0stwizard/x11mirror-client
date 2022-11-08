@@ -46,14 +46,17 @@ imgman_create_pictures(imgman_ptr m)
     m->picture.window = XRenderCreatePicture
         (dpy, window, m->format.window, CPSubwindowMode, &(m->pa));
 
-    m->pixmap = XCreatePixmap(dpy, root, w, h, 32);
+    /* pixmap's depth must be equal to out_format's depth */
+    m->pixmap = XCreatePixmap(dpy, root, w, h, m->format.output->depth);
     m->picture.output = XRenderCreatePicture
         (dpy, m->pixmap, m->format.output, 0, NULL);
 
+#ifdef _DEBUG
     XRenderColor c = {
         .red = 0x0000, .green = 0x0000, .blue = 0x0000, .alpha = 0x0000
     };
     XRenderFillRectangle(dpy, PictOpSrc, m->picture.output, &c, 0, 0, w, h);
+#endif
 
     m->damage.output = XDamageCreate (dpy, m->pixmap, XDamageReportRawRectangles);
 

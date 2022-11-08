@@ -5,10 +5,6 @@
 #include "common.h"
 #include "tojpg.h"
 
-/*
- * FIXME: output quality is really bad & size of png files is smaller.
- */
-
 /* RGBA, BGRA, byte_order, mask, bits_per_pixel, mask shift:
  * https://stackoverflow.com/q/14224293
  */
