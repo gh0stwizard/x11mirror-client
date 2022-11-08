@@ -414,8 +414,6 @@ to us, as I mentioned before.
 That's all.
 
 
-
-
 ## See also
 
 1. You may found the server to test the program here: [x11mirror-server][1]
@@ -431,6 +429,8 @@ That's all.
 
 Parts of the program contains a code provided by the [xwd][3] utility
 wrote by The Open Group & Hewlett-Packard Co.
+
+[libb64][23] written by Chris Venter
 
 
 ## References
@@ -493,3 +493,4 @@ find a place in Internet which explains X11 extentions in a such simple way.
 [20]: https://github.com/resurrecting-open-source-projects/scrot/
 [21]: https://github.com/naelstrof/maim/
 [22]: https://sourceforge.net/projects/enlightenment/files/imlib2-src/
+[23]: https://libb64.sourceforge.net/

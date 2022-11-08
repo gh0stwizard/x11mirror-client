@@ -3,6 +3,8 @@ CPPFLAGS = -Wall -Wextra -std=c99 -pedantic -D_XOPEN_SOURCE=500 -D_POSIX_C_SOURC
 PKG_CONFIG ?= pkg-config
 INSTALL ?= install
 RM ?= rm -f
+CURL ?= curl
+UNZIP ?= unzip
 
 MAJOR_VERSION = 1
 MINOR_VERSION = 0
@@ -40,6 +42,10 @@ ifndef ENABLE_ERRORS
 export ENABLE_ERRORS = YES
 endif
 
+B64_URL ?= https://sourceforge.net/projects/libb64/files/libb64/libb64/libb64-1.2.1.zip/download
+B64_OUT ?= libb64-1.2.1.zip
+B64_DIR = $(patsubst %.zip,%,$(B64_OUT))
+
 #----------------------------------------------------------#
 
 MODS_X11 ?= x11 xcomposite xrender xfixes xdamage
@@ -51,6 +57,13 @@ ifeq ($(WITH_CURL),YES)
 DEFS_CURL ?= -DHAVE_CURL $(shell $(PKG_CONFIG) --cflags libcurl)
 LIBS_CURL ?= $(shell $(PKG_CONFIG) --libs libcurl)
 LIBS_CURL_STATIC ?= $(shell $(PKG_CONFIG) --static --libs libcurl)
+CURL_HAS_MIME = $(shell $(PKG_CONFIG) --atleast-version=7.56.0 libcurl && echo YES || echo NO)
+ifeq ($(CURL_HAS_MIME),NO)
+_b64 = b64
+_b64clean = b64-clean
+DEFS_CURL += -I$(B64_DIR)/include
+LIBS_CURL += -Wl,-Bstatic -L$(B64_DIR)/src -lb64 -Wl,-Bdynamic
+endif
 else
 IGNORE_SOURCES += upload.c
 endif
@@ -99,8 +112,25 @@ endif
 
 all: $(PROGRAM)
 
+
+$(B64_OUT):
+	$(CURL) -L $(B64_URL) -o $(B64_OUT)
+
+$(B64_DIR)/Makefile:
+	$(UNZIP) $(B64_OUT)
+
+b64-prep: $(B64_OUT) $(B64_DIR)/Makefile
+
+b64: b64-prep
+	$(MAKE) -C $(B64_DIR) all_src
+
+b64-clean:
+	$(MAKE) -C $(B64_DIR) clean
+
 clean:
 	$(RM) $(PROGRAM) $(OBJECTS)
+
+distclean: clean $(_b64clean)
 
 %.o: %.c
 	$(CC) $(CPPFLAGS) $(DEFS) $(CFLAGS) -o $@ -c $<
@@ -108,9 +138,10 @@ clean:
 topng.o:    topng.c topng.h
 tojpg.o:    tojpg.c tojpg.h
 imgman.o:   imgman.c imgman.h
+upload.o:   upload.c upload.h
 main.o:     main.c common.h imgman.h
 
-$(PROGRAM): $(OBJECTS)
+$(PROGRAM): $(_b64) $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 
 help:

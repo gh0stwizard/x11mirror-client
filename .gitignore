@@ -3,3 +3,6 @@ x11mirror-client
 *~
 *.xwd
 *.png
+*.jpg
+*.jpeg
+libb64-*
