@@ -111,6 +111,7 @@ upload_file (const char *path)
 #endif
 
     free (storage.memory);
+    curl_mime_free (mime);
 
     return (res == CURLE_OK) ? 0 : 1;
 }
